@@ -14,7 +14,7 @@ library(rsample)
 # load features dataset
 ```{r}
 features<-as.matrix(read.csv(file="data/features.csv",header=F))
-colnames(features)<-c("X1", "X3", "X4", "X5")
+colnames(features)<-c("x1", "x3", "x4", "x5")
 head(features)
 ```
 
@@ -39,15 +39,45 @@ features.ts<-ts(features,start=c(min(time),max(time)),frequency=1)
 plot(features.ts,main="Time Series - Input Signal",xlab="Time",ylab="Input Signal")
 ```
 
-# time series of putput signal
+# time series of output signal
 ```{r}
 target.ts<-ts(target,start=c(min(time),max(time)),frequency=1)
 plot(target.ts,main="Time Series - Output Signal",xlab="Time",ylab="Output Signal")
 ```
 
-# density distribution
+# Task 1.2: Distribution of Each Signal
 ```{r}
-density_features<-density(features)
-plot(density_features,main="Density Distribution of Each Signal")
+# histogram for temperature (x1)
+density_x1<-density(features[,"x1"])
+hist(features[,"x1"],freq=FALSE, main="Distribution of Temperature (x1)", xlab="Ambient temperature (°C)")
+lines(density_x1, lwd=2)
+```
+
+```{r}
+# histogram for ambient pressure (x3)
+density_x3<-density(features[,"x3"])
+hist(features[,"x3"],freq=FALSE, main="Distribution of Ambient Pressure (x3)", xlab="Atmospheric pressure (millibar)")
+lines(density_x3, lwd=2)
+```
+
+```{r}
+# histogram for relative humidity (x4)
+density_x4<-density(features[,"x4"])
+hist(features[,"x4"],freq=FALSE, main="Distribution of Relative Humidity (x4)", xlab="Humidity level (%)")
+lines(density_x4, lwd=2)
+```
+
+```{r}
+# histogram for exhaust vacuum (x5)
+density_x5<-density(features[,"x5"])
+hist(features[,"x5"],freq=FALSE, main="Distribution of Exhaust Vacuum (x5)", xlab="Vacuum collected from the steam turbine (cm Hg)")
+lines(density_x5, lwd=2)
+```
+
+```{r}
+# histogram for net hourly electrical energy output (X2)
+density_x2<-density(target[,"X2"])
+hist(target[,"X2"],freq=FALSE, main="Distribution of Net hourly electrical energy output (X2)", xlab="Net hourly electrical energy output in MW")
+lines(density_x2, lwd=2)
 ```
 
