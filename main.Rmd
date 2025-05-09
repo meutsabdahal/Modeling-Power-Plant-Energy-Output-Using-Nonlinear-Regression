@@ -1,0 +1,34 @@
+# install required packages/library
+```{r}
+install.packages("matlib")
+install.packages("rsample")
+```
+
+# import required packages/library
+```{r}
+library(matlib)
+library(ggplot2)
+library(rsample)
+```
+
+# load features dataset
+```{r}
+features<-as.matrix(read.csv(file="data/features.csv", header=F))
+colnames(features)<-c("X1", "X3", "X4", "X5")
+head(features)
+```
+
+# load target dataset
+```{r}
+target<-as.matrix(read.csv(file="data/target.csv", header=F))
+colnames(target)<-c("X2")
+head(target)
+```
+
+# load time series dataset
+```{r}
+time<-as.matrix((read.csv(file="data/timeseries.csv", header=F)))
+colnames(time)<-c("T1")
+head(time)
+```
+
