@@ -45,3 +45,9 @@ target.ts<-ts(target,start=c(min(time),max(time)),frequency=1)
 plot(target.ts,main="Time Series - Output Signal",xlab="Time",ylab="Output Signal")
 ```
 
+# density distribution
+```{r}
+density_features<-density(features)
+plot(density_features,main="Density Distribution of Each Signal")
+```
+
