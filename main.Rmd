@@ -13,22 +13,35 @@ library(rsample)
 
 # load features dataset
 ```{r}
-features<-as.matrix(read.csv(file="data/features.csv", header=F))
+features<-as.matrix(read.csv(file="data/features.csv",header=F))
 colnames(features)<-c("X1", "X3", "X4", "X5")
 head(features)
 ```
 
 # load target dataset
 ```{r}
-target<-as.matrix(read.csv(file="data/target.csv", header=F))
+target<-as.matrix(read.csv(file="data/target.csv",header=F))
 colnames(target)<-c("X2")
 head(target)
 ```
 
 # load time series dataset
 ```{r}
-time<-as.matrix((read.csv(file="data/timeseries.csv", header=F)))
+time<-as.matrix((read.csv(file="data/timeseries.csv",header=F)))
 colnames(time)<-c("T1")
 head(time)
+```
+
+# Task 1: Preliminary Data Analysis
+# time series of input signals
+```{r}
+features.ts<-ts(features,start=c(min(time),max(time)),frequency=1)
+plot(features.ts,main="Time Series - Input Signal",xlab="Time",ylab="Input Signal")
+```
+
+# time series of putput signal
+```{r}
+target.ts<-ts(target,start=c(min(time),max(time)),frequency=1)
+plot(target.ts,main="Time Series - Output Signal",xlab="Time",ylab="Output Signal")
 ```
 
