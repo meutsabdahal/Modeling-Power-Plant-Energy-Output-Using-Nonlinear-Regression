@@ -9,6 +9,7 @@ install.packages("rsample")
 library(matlib)
 library(ggplot2)
 library(rsample)
+library(corrplot)
 ```
 
 # load features dataset
@@ -79,5 +80,50 @@ lines(density_x5, lwd=2)
 density_x2<-density(target[,"X2"])
 hist(target[,"X2"],freq=FALSE, main="Distribution of Net hourly electrical energy output (X2)", xlab="Net hourly electrical energy output in MW")
 lines(density_x2, lwd=2)
+```
+
+# Task 1.3: Correlation and Scatter Plots
+```{r}
+# correlation
+combined <- cbind(features, target)
+correlation<-cor(combined)
+print(correlation)
+corrplot(correlation)
+```
+
+# scatter plot of x1 and X2
+```{r}
+plot(features[,"x1"], 
+     target[,"X2"], 
+     main="Temperature vs Net Hourly Electrical Energy Output", 
+     xlab="Temperature (°C)", 
+     ylab="Net Hourly Electrical Energy Output (MW)")
+```
+
+# scatter plot of x3 and X2
+```{r}
+plot(features[,"x3"], 
+     target[,"X2"], 
+     main="Ambient Pressure vs Net Hourly Electrical Energy Output", 
+     xlab="Ambient Pressure (millibar)", 
+     ylab="Net Hourly Electrical Energy Output (MW)")
+```
+
+# scatter plot of x4 and X2
+```{r}
+plot(features[,"x4"], 
+     target[,"X2"], 
+     main="Relative Humidity vs Net Hourly Electrical Energy Output", 
+     xlab="Relative Humidity (%)", 
+     ylab="Net Hourly Electrical Energy Output (MW)")
+```
+
+# scatter plot of x5 and X2
+```{r}
+plot(features[,"x5"], 
+     target[,"X2"], 
+     main="Exhaust Vacuum vs Net Hourly Electrical Energy Output", 
+     xlab="Exhaust Vacuum (cm Hg)", 
+     ylab="Net Hourly Electrical Energy Output (MW)")
 ```
 
