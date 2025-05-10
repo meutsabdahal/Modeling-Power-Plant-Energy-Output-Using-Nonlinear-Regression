@@ -127,3 +127,27 @@ plot(features[,"x5"],
      ylab="Net Hourly Electrical Energy Output (MW)")
 ```
 
+# Task 2: Regression - Modelling the Between the Gene Expression
+```{r}
+# candidate nonlinear polynomial regression models
+model1<-function(X, theta){
+  theta[1]*X$x4 + theta[2]*X$x3^2 + theta[3]
+}
+
+model2<-function(X, theta){
+  theta[1]*X$x4 + theta[2]*X$x3^2 + theta[3]*X$x5 + theta[4]
+}
+
+model3<-function(X, theta){
+  theta[1]*X$x3 + theta[2]*X$x4 + theta[3]*X$x5^3
+}
+
+model4<-function(X, theta){
+  theta[1]*X$x4 + theta[2]*X$x3^2 + theta[3]*X$x5^3 + theta[4]
+}
+
+model5<-function(X, theta){
+  theta[1]*X$x4 + theta[2]*X$x1^2 + theta[3]*X$x3^2 + theta[4]
+}
+```
+
