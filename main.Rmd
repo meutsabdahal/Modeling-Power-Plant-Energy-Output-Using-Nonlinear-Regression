@@ -151,3 +151,55 @@ model5<-function(X, theta){
 }
 ```
 
+# Task 2.1: estimation of model parameters (theta) for every candidate model using least square
+```{r}
+# convert matrix into dataframe
+X<-as.data.frame(features)
+
+theta_ridge<-function(X, y, lambda=1e-1){
+  X_bias<-cbind(1, as.matrix(X))
+  XtX <- t(X_bias) %*% X_bias  # compute X^T * X
+  XtX_reg <- XtX + lambda * diag(c(0, rep(1, ncol(X)))) # regularization term 
+  theta <- ginv(XtX_reg) %*% t(X_bias) %*% y # generalized inverse to solve
+  return(theta)
+}
+```
+
+```{r}
+# theta for model 1
+X_model1 <- data.frame(x4 = X$x4, x3 = X$x3^2)
+theta_model1 <- theta_ridge(X_model1, target)
+print("Theta Model 1:")
+print(theta_model1)
+```
+
+```{r}
+# theta for model 2
+X_model2 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5)
+theta_model2 <- theta_ridge(X_model2, target)
+print("Theta Model 2:")
+print(theta_model2)
+```
+
+```{r}
+X_model3 <- data.frame(x3 = X$x3, x4 = X$x4, x5 = X$x5^3)  
+theta_model3 <- theta_ridge(X_model3, target)
+print("Theta for Model 3:")
+print(theta_model3)
+
+```
+
+```{r}
+X_model4 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5^3) 
+theta_model4 <- theta_ridge(X_model4, target)
+print("Theta for Model 4:")
+print(theta_model4)
+```
+
+```{r}
+X_model5 <- data.frame(x4 = X$x4, x1 = X$x1^2, x3 = X$x3^2)
+theta_model5 <- theta_ridge(X_model5, Y)
+print("Theta for Model 5:")
+print(theta_model5)
+```
+
