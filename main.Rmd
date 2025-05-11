@@ -203,3 +203,43 @@ print("Theta for Model 5:")
 print(theta_model5)
 ```
 
+# Task 2.2: Model Residual Sum of Squared Error (RSS)
+```{r}
+compute_rss<-function(X,y,theta,model){
+  y_pred<-model(X, theta) # prediction
+  rss<-sum((y-y_pred)^2)
+  return(rss)
+}
+```
+
+```{r}
+# RSS for model1
+rss_model1 <- compute_rss(X_model1, target, theta_model1, model1)
+print("Model 1 RSS:")
+print(rss_model1)
+```
+
+```{r}
+rss_model2<-compute_rss(X_model2, target, theta_model2, model2)
+print("Model 2 RSS:")
+print(rss_model2)
+```
+
+```{r}
+rss_model3<-compute_rss(X_model3, target, theta_model3, model3)
+print("Model 3 RSS:")
+print(rss_model3)
+```
+
+```{r}
+rss_model4<-compute_rss(X_model4, target, theta_model4, model4)
+print("Model 4 RSS:")
+print(rss_model4)
+```
+
+```{r}
+rss_model5<-compute_rss(X_model5,target,theta_model5,model5)
+print("Model 5 RSS:")
+print(rss_model5)
+```
+
