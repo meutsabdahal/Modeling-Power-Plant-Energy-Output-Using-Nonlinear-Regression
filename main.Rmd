@@ -253,13 +253,127 @@ compute_loglikelihood_variance<-function(rss, n){
 ```
 
 ```{r}
-# log likelihood model1
+# log likelihood and variance model1
 compute_model1<-compute_loglikelihood_variance(rss_model1, length(target))
 model1_log_likelihood<-compute_model1$log_likelihood
 model1_variance<-compute_model1$variance
 print("Model 1 Log-Likelihood:")
 print(model1_log_likelihood)
-print("Model 1 variance:")
+print("Model 1 Variance:")
 print(model1_variance)
+```
+
+```{r}
+# log likelihood and variance model2
+compute_model2<-compute_loglikelihood_variance(rss_model2, length(target))
+model2_log_likelihood<-compute_model2$log_likelihood
+model2_variance<-compute_model2$variance
+print("Model 2 Log-Likelihood:")
+print(model2_log_likelihood)
+print("Model 2 Variance:")
+print(model2_variance)
+```
+
+```{r}
+# log likelihood and variance model3
+compute_model3<-compute_loglikelihood_variance(rss_model3, length(target))
+model3_log_likelihood<-compute_model3$log_likelihood
+model3_variance<-compute_model3$variance
+print("Model 3 Log-Likelihood:")
+print(model3_log_likelihood)
+print("Model 3 Variance:")
+print(model3_variance)
+```
+
+```{r}
+# log likelihood and variance model4
+compute_model4<-compute_loglikelihood_variance(rss_model4, length(target))
+model4_log_likelihood<-compute_model4$log_likelihood
+model4_variance<-compute_model4$variance
+print("Model 4 Log-Likelihood:")
+print(model4_log_likelihood)
+print("Model 4 Variance:")
+print(model4_variance)
+```
+
+```{r}
+# log likelihood and variance model5
+compute_model5<-compute_loglikelihood_variance(rss_model5, length(target))
+model5_log_likelihood<-compute_model5$log_likelihood
+model5_variance<-compute_model5$variance
+print("Model 5 Log-Likelihood:")
+print(model5_log_likelihood)
+print("Model 5 Variance")
+print(model5_variance)
+```
+
+# Compute AIC and BIC
+```{r}
+# calculate aic
+compute_aic<-function(log_likelihood, k){
+  aic<-2 * k - 2 * log_likelihood
+  return(aic)
+}
+
+# calculate bic
+compute_bic<-function(log_likelihood, k, n){
+  bic <- k * log(n) - 2 * log_likelihood
+  return(bic)
+}
+```
+
+```{r}
+# aic and bic model 1
+model1_k<-length(theta_model1)
+model1_aic<-compute_aic(model1_log_likelihood, model1_k)
+model1_bic<-compute_bic(model1_log_likelihood, model1_k, length(target))
+print("Model 1 AIC:")
+print(model1_aic)
+print("Model 2 BIC:")
+print(model1_bic)
+```
+
+```{r}
+# aic and bic model 2
+model2_k<-length(theta_model2)
+model2_aic<-compute_aic(model2_log_likelihood, model2_k)
+model2_bic<-compute_bic(model2_log_likelihood, model2_k, length(target))
+print("Model 2 AIC:")
+print(model2_aic)
+print("Model 2 BIC:")
+print(model2_bic)
+```
+
+```{r}
+# aic and bic model 3
+model3_k<-length(theta_model3)
+model3_aic<-compute_aic(model3_log_likelihood, model3_k)
+model3_bic<-compute_bic(model3_log_likelihood, model3_k, length(target))
+print("Model 3 AIC:")
+print(model3_aic)
+print("Model 3 BIC:")
+print(model3_bic)
+```
+
+```{r}
+# aic and bic model 4
+model4_k<-length(theta_model4)
+model4_aic<-compute_aic(model4_log_likelihood, model4_k)
+model4_bic<-compute_bic(model4_log_likelihood, model4_k, length(target))
+print("Model 4 AIC:")
+print(model4_aic)
+print("Model 4 BIC:")
+print(model4_bic)
+```
+
+```{r}
+# aic and bic model 5
+model5_k<-length(theta_model5)
+model5_aic<-compute_aic(model5_log_likelihood, model5_k)
+model5_bic<-compute_bic(model5_log_likelihood, model5_k, length(target))
+print("Model 5 AIC:")
+print(model5_aic)
+print("Model 5 BIC:")
+print(model5_bic)
 ```
 
