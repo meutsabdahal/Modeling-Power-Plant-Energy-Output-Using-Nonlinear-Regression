@@ -243,3 +243,23 @@ print("Model 5 RSS:")
 print(rss_model5)
 ```
 
+# Log-likelihood function
+```{r}
+compute_loglikelihood_variance<-function(rss, n){
+  sigma_squared <- rss/(n-1)
+  log_likelihood<- -(n/2)*log(2*pi)-(n/2)*log(sigma_squared)-(1/(2*sigma_squared))*rss
+  return(list(log_likelihood=log_likelihood,variance=sigma_squared))
+}
+```
+
+```{r}
+# log likelihood model1
+compute_model1<-compute_loglikelihood_variance(rss_model1, length(target))
+model1_log_likelihood<-compute_model1$log_likelihood
+model1_variance<-compute_model1$variance
+print("Model 1 Log-Likelihood:")
+print(model1_log_likelihood)
+print("Model 1 variance:")
+print(model1_variance)
+```
+
