@@ -377,3 +377,47 @@ print("Model 5 BIC:")
 print(model5_bic)
 ```
 
+# Task 2.5: Distributin of model prediction errors
+```{r}
+compute_model_prediction_error<-function(X, y, theta, model){
+  y_pred<-model(X, theta)
+  prediction_error<-y - y_pred
+  return(prediction_error)
+}
+```
+
+```{r}
+# QQ plot for model 1 distribution
+prediction_error_model1 <- compute_model_prediction_error(X_model1, target, theta_model1, model1)
+qqnorm(prediction_error_model1, main = "Q-Q Plot of Prediction Error for Model 1")
+qqline(prediction_error_model1)  
+```
+
+```{r}
+# QQ plot for model 2 distribution
+prediction_error_model2 <- compute_model_prediction_error(X_model2, target, theta_model2, model2)
+qqnorm(prediction_error_model2, main = "Q-Q Plot of Prediction Error for Model 2")
+qqline(prediction_error_model2)  
+```
+
+```{r}
+# QQ plot for model 3 distribution
+prediction_error_model3 <- compute_model_prediction_error(X_model3, target, theta_model3, model3)
+qqnorm(prediction_error_model3, main = "Q-Q Plot of Prediction Error for Model 3")
+qqline(prediction_error_model3)  
+```
+
+```{r}
+# QQ plot for model 4 distribution
+prediction_error_model4 <- compute_model_prediction_error(X_model4, target, theta_model4, model4)
+qqnorm(prediction_error_model4, main = "Q-Q Plot of Prediction Error for Model 4")
+qqline(prediction_error_model4)  
+```
+
+```{r}
+# QQ plot for model 5 distribution
+prediction_error_model5 <- compute_model_prediction_error(X_model5, target, theta_model5, model5)
+qqnorm(prediction_error_model5, main = "Q-Q Plot of Prediction Error for Model 5")
+qqline(prediction_error_model5)  
+```
+
