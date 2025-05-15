@@ -1,130 +1,260 @@
-# install required packages/library
+# Installing Required Packages
 ```{r}
+# install required packages/library
 install.packages("matlib")
 install.packages("rsample")
+install.packages("ggplot2")
+install.packages("corrplot")
+install.packages("MASS")
+install.packages("gridExtra")
+install.packages("dplyr")
+install.packages("knitr")
 ```
 
-# import required packages/library
+# Loading Libraries
 ```{r}
-library(matlib)
-library(ggplot2)
-library(rsample)
-library(corrplot)
+# import required packages/libraries
+library(matlib)     # for matrix operations
+library(ggplot2)    # for data visualization
+library(rsample)    # for data splitting
+library(corrplot)   # for correlation visualization
+library(MASS)       # for statistical functions
+library(gridExtra)  # for arranging plots
+library(dplyr)      # for data manipulation
+library(knitr)      # for tables
 ```
 
-# load features dataset
+# Loading Datasets
 ```{r}
-features<-as.matrix(read.csv(file="data/features.csv",header=F))
-colnames(features)<-c("x1", "x3", "x4", "x5")
+# load features dataset (independent variable)
+features <- as.matrix(read.csv(file="data/features.csv", header=FALSE))
+colnames(features) <- c("x1", "x3", "x4", "x5")
+
+# load target dataset (dependent variable)
+target <- as.matrix(read.csv(file="data/target.csv", header=FALSE))
+colnames(target) <- c("X2")
+
+# load time series dataset
+time <- as.matrix((read.csv(file="data/timeseries.csv", header=FALSE)))
+colnames(time) <- c("T1")
+
+# display the first few rows of each dataset
+cat("Features Dataset: \n")
+head(features)
+
+cat("\nTarget Dataset: \n")
+head(target)
+
+cat("\nTimeseries Dataset: \n")
 head(features)
 ```
 
-# load target dataset
+# Summary Statistics
 ```{r}
-target<-as.matrix(read.csv(file="data/target.csv",header=F))
-colnames(target)<-c("X2")
-head(target)
-```
+# create a combined dataframe
+combined_df <- data.frame(
+  Temperature = features[,"x1"],
+  Ambient_Pressure = features[,"x3"],
+  Relative_Humidity = features[,"x4"],
+  Exhaust_Vacuum = features[,"x5"],
+  Energy_Output = target[,"X2"]
+)
 
-# load time series dataset
-```{r}
-time<-as.matrix((read.csv(file="data/timeseries.csv",header=F)))
-colnames(time)<-c("T1")
-head(time)
+# summary statistics
+summary_stats <- summary(combined_df)
+print(summary_stats)
+
+# additional statistics
+additional_stats <- data.frame(
+  Standard_Deviation = sapply(combined_df, sd),
+  IQR = sapply(combined_df, IQR),
+  Skewness = sapply(combined_df, function(x) {
+    (mean(x) - median(x)) / sd(x)
+  })
+)
+
+kable(additional_stats, caption = "Additional Statistics for Each Variable")
 ```
 
 # Task 1: Preliminary Data Analysis
-# time series of input signals
+## Time Series Analysis
+### Time Series Analysis (Input Signal)
 ```{r}
-features.ts<-ts(features,start=c(min(time),max(time)),frequency=1)
-plot(features.ts,main="Time Series - Input Signal",xlab="Time",ylab="Input Signal")
+# convert features into time series objects
+features.ts <- ts(features, start = c(min(time), max(time)), frequency = 1)
+
+# create individual time series plots for each input signal
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+# plot for temperature (x1)
+plot(features.ts[,"x1"], main = "Time Series - Temperature",
+     xlab = "Time", ylab = "Temperature (°C)", col = "darkred")
+
+# plot for ambient pressure (x3)
+plot(features.ts[,"x3"], main = "Time Series - Ambient Pressure",
+     xlab = "Time", ylab = "Pressure (millibar)", col = "darkblue")
+
+# plot for relative humidity (x4)
+plot(features.ts[,"x4"], main = "Time Series - Relative Humidity",
+     xlab = "Time", ylab = "Humidity (%)", col = "darkgreen")
+
+# plot for exhaust vacuum (x5)
+plot(features.ts[,"x5"], main = "Time Series - Exhaust Vacuum",
+     xlab = "Time", ylab = "Vacuum (cm Hg)", col = "darkorange")
+
+# reset layout
+par(mfrow = c(1, 1))
 ```
 
-# time series of output signal
+### Time Series Analysis (Input Signal)
 ```{r}
-target.ts<-ts(target,start=c(min(time),max(time)),frequency=1)
-plot(target.ts,main="Time Series - Output Signal",xlab="Time",ylab="Output Signal")
+# convert target to time series object
+target.ts <- ts(target, start = c(min(time), max(time)), frequency = 1)
+
+# plot output signal time series
+plot(target.ts, main = "Time Series - Net Hourly Electrical Energy Output",
+     xlab = "Time", ylab = "Energy Output (MW)", col = "purple", lwd = 1.5)
 ```
 
-# Task 1.2: Distribution of Each Signal
+## Distribution of Each Signal (Output Signal)
 ```{r}
+# function to create enhanced histogram with density plot and normal reference
+plot_enhanced_histogram <- function(data, column, title, xlab) {
+  # calculate density
+  dens <- density(data)
+  
+  # create histogram
+  hist(data, freq = FALSE, main = title, xlab = xlab, col = "lightblue",
+    border = "white", ylim = c(0, max(dens$y) * 1.1))
+  
+  # add density line
+  lines(dens, lwd = 2, col = "darkblue")
+  
+  # add normal distribution reference
+  curve(dnorm(x, mean = mean(data), sd = sd(data)), add = TRUE,
+    col = "red", lty = 2, lwd = 1.5)
+  
+  # add legend
+  legend("topleft", legend = c("Density", "Normal Reference"),
+    col = c("darkblue", "red"), lty = c(1, 2), lwd = c(2, 1.5))
+  
+  # add mean line
+  abline(v = mean(data), col = "darkgreen", lwd = 1.5, lty = 2)
+  
+  # add text for mean and standard deviation
+  usr <- par("usr")  # c(x1, x2, y1, y2)
+  text(x = usr[2] - 0.02 * diff(usr[1:2]), y = usr[4] - 0.05 * diff(usr[3:4]),  
+    labels = sprintf("Mean: %.2f\nSD:   %.2f", mean(data), sd(data)), adj = c(1, 1))
+}
+
+# set up plotting area
+par(mfrow = c(3, 2), mar = c(4, 4, 3, 1))
+
 # histogram for temperature (x1)
-density_x1<-density(features[,"x1"])
-hist(features[,"x1"],freq=FALSE, main="Distribution of Temperature (x1)", xlab="Ambient temperature (°C)")
-lines(density_x1, lwd=2)
-```
+plot_enhanced_histogram(
+  features[,"x1"], 
+  "x1", 
+  "Distribution of Temperature (x1)", 
+  "Ambient temperature (°C)"
+)
 
-```{r}
 # histogram for ambient pressure (x3)
-density_x3<-density(features[,"x3"])
-hist(features[,"x3"],freq=FALSE, main="Distribution of Ambient Pressure (x3)", xlab="Atmospheric pressure (millibar)")
-lines(density_x3, lwd=2)
-```
+plot_enhanced_histogram(
+  features[,"x3"], 
+  "x3", 
+  "Distribution of Ambient Pressure (x3)", 
+  "Atmospheric pressure (millibar)"
+)
 
-```{r}
 # histogram for relative humidity (x4)
-density_x4<-density(features[,"x4"])
-hist(features[,"x4"],freq=FALSE, main="Distribution of Relative Humidity (x4)", xlab="Humidity level (%)")
-lines(density_x4, lwd=2)
-```
+plot_enhanced_histogram(
+  features[,"x4"], 
+  "x4", 
+  "Distribution of Relative Humidity (x4)", 
+  "Humidity level (%)"
+)
 
-```{r}
 # histogram for exhaust vacuum (x5)
-density_x5<-density(features[,"x5"])
-hist(features[,"x5"],freq=FALSE, main="Distribution of Exhaust Vacuum (x5)", xlab="Vacuum collected from the steam turbine (cm Hg)")
-lines(density_x5, lwd=2)
-```
+plot_enhanced_histogram(
+  features[,"x5"], 
+  "x5", 
+  "Distribution of Exhaust Vacuum (x5)", 
+  "Vacuum (cm Hg)"
+)
 
-```{r}
 # histogram for net hourly electrical energy output (X2)
-density_x2<-density(target[,"X2"])
-hist(target[,"X2"],freq=FALSE, main="Distribution of Net hourly electrical energy output (X2)", xlab="Net hourly electrical energy output in MW")
-lines(density_x2, lwd=2)
+plot_enhanced_histogram(
+  target[,"X2"], 
+  "X2", 
+  "Distribution of Net Hourly Electrical Energy Output (X2)", 
+  "Net hourly electrical energy output (MW)"
+)
+
+# reset layout to single plot
+par(mfrow = c(1, 1))
 ```
 
-# Task 1.3: Correlation and Scatter Plots
+## Correlation Analysis and Scatter Plots
+### Correlation Matrix
 ```{r}
-# correlation
+# combine features and target for correlation analysis
 combined <- cbind(features, target)
-correlation<-cor(combined)
+
+# calculate correlation matrix
+correlation <- cor(combined)
 print(correlation)
-corrplot(correlation)
+
+# create enhanced correlation plot
+corrplot(correlation, method = "color", type = "upper", 
+         addCoef.col = "black", number.cex = 0.7,
+         tl.col = "black", tl.srt = 45,
+         title = "Correlation Matrix of Power Plant Variables",
+         mar = c(0, 0, 1, 0))
 ```
 
-# scatter plot of x1 and X2
+### Scatter Plots
 ```{r}
-plot(features[,"x1"], 
-     target[,"X2"], 
-     main="Temperature vs Net Hourly Electrical Energy Output", 
-     xlab="Temperature (°C)", 
-     ylab="Net Hourly Electrical Energy Output (MW)")
-```
+# Define a palette of 4 colors (one per feature)
+base_colors <- c("steelblue", "tomato", "forestgreen", "orchid")
+# Optionally add a bit of transparency
+plot_colors <- sapply(base_colors, function(col) adjustcolor(col, alpha.f = 0.7))
 
-# scatter plot of x3 and X2
-```{r}
-plot(features[,"x3"], 
-     target[,"X2"], 
-     main="Ambient Pressure vs Net Hourly Electrical Energy Output", 
-     xlab="Ambient Pressure (millibar)", 
-     ylab="Net Hourly Electrical Energy Output (MW)")
-```
+# List of columns and their labels
+plots <- list(
+  x1 = c("Ambient Temp (°C)",       "Net Energy Output (MW)"),
+  x3 = c("Ambient Pressure (mbar)", "Net Energy Output (MW)"),
+  x4 = c("Relative Humidity (%)",   "Net Energy Output (MW)"),
+  x5 = c("Exhaust Vacuum (cm Hg)",  "Net Energy Output (MW)")
+)
 
-# scatter plot of x4 and X2
-```{r}
-plot(features[,"x4"], 
-     target[,"X2"], 
-     main="Relative Humidity vs Net Hourly Electrical Energy Output", 
-     xlab="Relative Humidity (%)", 
-     ylab="Net Hourly Electrical Energy Output (MW)")
-```
+# Set up 2 rows × 3 columns
+par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
 
-# scatter plot of x5 and X2
-```{r}
-plot(features[,"x5"], 
-     target[,"X2"], 
-     main="Exhaust Vacuum vs Net Hourly Electrical Energy Output", 
-     xlab="Exhaust Vacuum (cm Hg)", 
-     ylab="Net Hourly Electrical Energy Output (MW)")
+# Loop over each feature → plot(feature, target) with its own color
+i <- 1
+for (name in names(plots)) {
+  labs <- plots[[name]]
+  x    <- features[, name]
+  y    <- target[, "X2"]
+  
+  plot(
+    x, y,
+    xlab  = labs[1],
+    ylab  = labs[2],
+    main  = paste(name, "vs X2"),
+    pch   = 16,
+    cex   = 0.6,
+    col   = plot_colors[i]
+  )
+  i <- i + 1
+}
+
+# Leave the last panel empty
+plot.new()
+
+# Reset to single plot
+par(mfrow = c(1, 1))
+
 ```
 
 # Task 2: Regression - Modelling the Between the Gene Expression
