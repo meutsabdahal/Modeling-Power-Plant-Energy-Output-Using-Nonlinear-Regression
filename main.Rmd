@@ -198,7 +198,7 @@ print(theta_model4)
 
 ```{r}
 X_model5 <- data.frame(x4 = X$x4, x1 = X$x1^2, x3 = X$x3^2)
-theta_model5 <- theta_ridge(X_model5, Y)
+theta_model5 <- theta_ridge(X_model5, target)
 print("Theta for Model 5:")
 print(theta_model5)
 ```
@@ -206,7 +206,7 @@ print(theta_model5)
 # Task 2.2: Model Residual Sum of Squared Error (RSS)
 ```{r}
 compute_rss<-function(X,y,theta,model){
-  y_pred<-model(X, theta) # prediction
+  y_pred<-model(X, theta) 
   rss<-sum((y-y_pred)^2)
   return(rss)
 }
@@ -329,7 +329,7 @@ model1_aic<-compute_aic(model1_log_likelihood, model1_k)
 model1_bic<-compute_bic(model1_log_likelihood, model1_k, length(target))
 print("Model 1 AIC:")
 print(model1_aic)
-print("Model 2 BIC:")
+print("Model 1 BIC:")
 print(model1_bic)
 ```
 
@@ -419,5 +419,244 @@ qqline(prediction_error_model4)
 prediction_error_model5 <- compute_model_prediction_error(X_model5, target, theta_model5, model5)
 qqnorm(prediction_error_model5, main = "Q-Q Plot of Prediction Error for Model 5")
 qqline(prediction_error_model5)  
+```
+
+# Task 2.7 train Test Split
+```{r}
+set.seed(42)  # for reproducibility
+
+# Create the full design matrix for Model 5
+X_model5 <- data.frame(
+  x4 = X$x4,
+  x1 = X$x1^2,
+  x3 = X$x3^2
+)
+y <- target
+
+# --- 1. Split into training and testing sets (70/30) ---
+n <- nrow(X_model5)
+train_idx <- sample(1:n, size = round(0.7 * n))
+test_idx <- setdiff(1:n, train_idx)
+
+X_train <- X_model5[train_idx, ]
+y_train <- y[train_idx, , drop = FALSE]
+X_test <- X_model5[test_idx, ]
+y_test <- y[test_idx, , drop = FALSE]
+
+# --- 2. Estimate theta on training data ---
+library(MASS)
+
+theta_ridge <- function(X, y, lambda = 1e-1) {
+  X_bias <- cbind(1, as.matrix(X))
+  XtX <- t(X_bias) %*% X_bias
+  XtX_reg <- XtX + lambda * diag(c(0, rep(1, ncol(X))))
+  theta <- ginv(XtX_reg) %*% t(X_bias) %*% y
+  return(theta)
+}
+
+theta_hat <- theta_ridge(X_train, y_train)
+
+# --- 3. Make predictions on the test set ---
+X_test_bias <- cbind(1, as.matrix(X_test))
+y_pred <- X_test_bias %*% theta_hat
+
+# --- 4. Compute 95% confidence intervals ---
+# Residual standard error from training data
+X_train_bias <- cbind(1, as.matrix(X_train))
+y_train_pred <- X_train_bias %*% theta_hat
+residuals_train <- y_train - y_train_pred
+rss <- sum(residuals_train^2)
+df <- nrow(X_train) - length(theta_hat)
+sigma2 <- rss / df
+
+# Standard errors of predictions
+XtX_inv <- ginv(t(X_train_bias) %*% X_train_bias + 1e-1 * diag(c(0, rep(1, ncol(X_train)))))
+se_pred <- sqrt(diag(X_test_bias %*% XtX_inv %*% t(X_test_bias)) * sigma2)
+
+# 95% confidence intervals
+lower_bound <- y_pred - 1.96 * se_pred
+upper_bound <- y_pred + 1.96 * se_pred
+
+# --- 5. Plot predictions, confidence intervals, and actual values ---
+plot(y_test, type = 'p', col = 'black', pch = 16,
+     ylab = "Target", xlab = "Test Sample Index", main = "Model 5 Prediction with 95% CI")
+points(y_pred, col = 'blue', pch = 17)
+arrows(1:length(y_pred), lower_bound, 1:length(y_pred), upper_bound, 
+       length = 0.05, angle = 90, code = 3, col = 'red')
+
+legend("topleft", legend = c("True y", "Predicted y", "95% CI"), 
+       col = c("black", "blue", "red"), pch = c(16, 17, NA), lty = c(NA, NA, 1))
+
+```
+
+```{r}
+install.packages("gridExtra")
+```
+
+
+```{r}
+set.seed(42)
+
+# --- 1) Prepare ---
+
+# Your estimated coefficients from Task 2 (ridge regression)
+theta_hat_vec <- as.vector(theta_hat)  # includes intercept + 3 params
+names(theta_hat_vec) <- c("intercept", colnames(X_train))
+
+# Find indices of 2 largest absolute coefficients (excluding intercept)
+abs_coefs <- abs(theta_hat_vec[-1])  
+top2_idx <- order(abs_coefs, decreasing = TRUE)[1:2]
+param_names <- names(abs_coefs)[top2_idx]
+
+cat("Selected parameters for ABC:", param_names, "\n")
+
+# Fix other parameters at estimated values
+fixed_params <- theta_hat_vec[-c(1, top2_idx + 1)]  # exclude intercept and top2
+
+# --- 2) Define simulation function based on model ---
+
+simulate_y <- function(X_data, theta_vec, sigma_sq) {
+  # theta_vec = c(intercept, coef_x4, coef_x1_squared, coef_x3_squared)
+  mu <- theta_vec[1] + 
+        theta_vec[2] * X_data$x4 + 
+        theta_vec[3] * X_data$x1 + 
+        theta_vec[4] * X_data$x3
+  y_sim <- rnorm(nrow(X_data), mean = mu, sd = sqrt(sigma_sq))
+  return(y_sim)
+}
+
+# --- 3) Define prior sampler for the 2 params ---
+
+# Get estimated values for the two parameters
+theta_1_hat <- theta_hat_vec[top2_idx[1] + 1]  # +1 for intercept offset
+theta_2_hat <- theta_hat_vec[top2_idx[2] + 1]
+
+# Define ±10% prior range around estimated values
+prior_range_1 <- c(theta_1_hat * 0.9, theta_1_hat * 1.1)
+prior_range_2 <- c(theta_2_hat * 0.9, theta_2_hat * 1.1)
+
+# Use estimated sigma_sq from training residuals
+sigma_sq_hat <- sigma2
+
+prior_sampler <- function() {
+  theta_1 <- runif(1, min = min(prior_range_1), max = max(prior_range_1))
+  theta_2 <- runif(1, min = min(prior_range_2), max = max(prior_range_2))
+  list(theta_1 = theta_1, theta_2 = theta_2, sigma_sq = sigma_sq_hat)
+}
+
+# --- 4) Calculate summary statistics ---
+
+calc_summary_stats <- function(y_vec) {
+  c(mean = mean(y_vec), var = var(y_vec))
+}
+
+S_obs <- calc_summary_stats(y_train)
+
+# --- 5) Distance metric ---
+
+distance_metric <- function(S_sim, S_obs) {
+  sqrt(sum((S_sim - S_obs)^2))
+}
+
+# --- 6) ABC rejection ---
+
+N_sim <- 10000  # number of simulations (increase for better posterior)
+
+pilot_runs <- 1000  # for epsilon selection
+pilot_distances <- numeric(pilot_runs)
+
+cat("Pilot run to select epsilon...\n")
+for (i in 1:pilot_runs) {
+  sample_params <- prior_sampler()
+  
+  # Build full theta vector: intercept + top2 params + fixed params
+  theta_full <- numeric(length(theta_hat_vec))
+  theta_full[1] <- theta_hat_vec[1]  # intercept fixed
+  theta_full[top2_idx[1] + 1] <- sample_params$theta_1
+  theta_full[top2_idx[2] + 1] <- sample_params$theta_2
+  
+  # fixed params fill others
+  fixed_names <- names(fixed_params)
+  for (name in fixed_names) {
+    pos <- which(names(theta_hat_vec) == name)
+    theta_full[pos] <- fixed_params[name]
+  }
+  
+  y_sim <- simulate_y(X_train, theta_full, sample_params$sigma_sq)
+  S_sim <- calc_summary_stats(y_sim)
+  pilot_distances[i] <- distance_metric(S_sim, S_obs)
+}
+
+finite_dists <- pilot_distances[is.finite(pilot_distances)]
+if (length(finite_dists) == 0) stop("No finite distances in pilot run!")
+
+epsilon <- quantile(finite_dists, 0.05)
+cat("Chosen epsilon (5th percentile):", epsilon, "\n")
+
+# --- 7) Rejection ABC ---
+
+accepted_thetas <- matrix(NA, nrow = N_sim, ncol = 2)
+accepted_count <- 0
+
+cat("Starting ABC rejection sampling...\n")
+pb <- txtProgressBar(min = 0, max = N_sim, style = 3)
+
+for (i in 1:N_sim) {
+  sample_params <- prior_sampler()
+  
+  theta_full <- numeric(length(theta_hat_vec))
+  theta_full[1] <- theta_hat_vec[1]
+  theta_full[top2_idx[1] + 1] <- sample_params$theta_1
+  theta_full[top2_idx[2] + 1] <- sample_params$theta_2
+  for (name in fixed_names) {
+    pos <- which(names(theta_hat_vec) == name)
+    theta_full[pos] <- fixed_params[name]
+  }
+  
+  y_sim <- simulate_y(X_train, theta_full, sample_params$sigma_sq)
+  S_sim <- calc_summary_stats(y_sim)
+  dist <- distance_metric(S_sim, S_obs)
+  
+  if (is.finite(dist) && dist < epsilon) {
+    accepted_count <- accepted_count + 1
+    accepted_thetas[accepted_count, ] <- c(sample_params$theta_1, sample_params$theta_2)
+  }
+  
+  setTxtProgressBar(pb, i)
+}
+close(pb)
+
+accepted_thetas <- accepted_thetas[1:accepted_count, , drop = FALSE]
+cat("Number of accepted samples:", accepted_count, "\n")
+
+# --- 8) Plot results ---
+
+library(ggplot2)
+library(gridExtra)
+
+df_post <- data.frame(
+  param1 = accepted_thetas[,1],
+  param2 = accepted_thetas[,2]
+)
+
+p1 <- ggplot(df_post, aes(x = param1)) +
+  geom_histogram(aes(y=..density..), bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(xintercept = theta_1_hat, color = "red", linetype = "dashed") +
+  labs(title = paste("Posterior of", param_names[1]), x = param_names[1])
+
+p2 <- ggplot(df_post, aes(x = param2)) +
+  geom_histogram(aes(y=..density..), bins = 30, fill = "lightgreen", color = "black") +
+  geom_vline(xintercept = theta_2_hat, color = "red", linetype = "dashed") +
+  labs(title = paste("Posterior of", param_names[2]), x = param_names[2])
+
+p_joint <- ggplot(df_post, aes(x = param1, y = param2)) +
+  geom_point(alpha = 0.4, color = "blue") +
+  geom_vline(xintercept = theta_1_hat, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = theta_2_hat, linetype = "dashed", color = "red") +
+  labs(title = "Joint Posterior Distribution", x = param_names[1], y = param_names[2])
+
+grid.arrange(p1, p2, p_joint, ncol = 2)
+
+
 ```
 
