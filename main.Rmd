@@ -682,3 +682,207 @@ ggplot(plot_data, aes(x = Observation)) +
   )
 ```
 
+# Task 3: Approximate Bayesian Computation (ABC)
+```{r}
+# two parameters with largest absolute values in Model 5
+param_abs_values <- abs(train_theta)
+
+intercept_index <- 4
+param_abs_values[intercept_index] <- 0  # Exclude intercept from consideration
+
+# find indices of two largest parameter values
+top_param_indices <- order(param_abs_values, decreasing = TRUE)[1:2]
+top_param_values <- train_theta[top_param_indices]
+
+cat("The two parameters with largest absolute values are at positions", 
+    top_param_indices, "with values", top_param_values, "\n")
+
+# define bounds for uniform prior
+prior_bounds <- matrix(0, nrow = 2, ncol = 2)
+for(i in 1:2) {
+  param_value <- top_param_values[i]
+  prior_bounds[i, 1] <- param_value - 0.5 * abs(param_value)  # Lower bound
+  prior_bounds[i, 2] <- param_value + 0.5 * abs(param_value)  # Upper bound
+}
+
+cat("Prior bounds for the two parameters:\n")
+print(prior_bounds)
+```
+
+## Uniform Distribution
+```{r}
+# function to simulate data from Model 5 with given parameters
+simulate_data <- function(X, theta_modified, orig_theta, param_indices) {
+  # create a copy of the original theta
+  theta_copy <- orig_theta
+  
+  # modify only the two selected parameters
+  theta_copy[param_indices] <- theta_modified
+  
+  # generate predictions using Model 5 with modified parameters
+  simulated_y <- model5(X, theta_copy)
+  
+  # add Gaussian noise based on estimated variance
+  noise_sd <- sqrt(model5_prediction_variance)
+  simulated_y <- simulated_y + rnorm(length(simulated_y), mean = 0, sd = noise_sd)
+  
+  return(simulated_y)
+}
+
+# function to compute distance between observed and simulated data
+compute_distance <- function(observed, simulated) {
+  # using RMSE as the distance metric
+  return(sqrt(mean((observed - simulated)^2)))
+}
+
+# rejection ABC algorithm
+rejection_abc <- function(X, observed_y, orig_theta, param_indices, prior_bounds, 
+                          n_samples = 5000, acceptance_rate = 0.05) {
+  # number of samples to accept
+  n_accept <- round(n_samples * acceptance_rate)
+  
+  # storage for samples and distances
+  all_samples <- matrix(0, nrow = n_samples, ncol = 2)
+  all_distances <- rep(0, n_samples)
+  
+  # generate samples from prior
+  for(i in 1:n_samples) {
+    # sample from uniform prior for the two parameters
+    theta_sample <- c(
+      runif(1, prior_bounds[1, 1], prior_bounds[1, 2]),
+      runif(1, prior_bounds[2, 1], prior_bounds[2, 2])
+    )
+    
+    # simulate data with sampled parameters
+    simulated_y <- simulate_data(X, theta_sample, orig_theta, param_indices)
+    
+    # compute distance
+    distance <- compute_distance(observed_y, simulated_y)
+    
+    # store sample and distance
+    all_samples[i, ] <- theta_sample
+    all_distances[i] <- distance
+  }
+  
+  # select samples with smallest distances
+  accepted_indices <- order(all_distances)[1:n_accept]
+  accepted_samples <- all_samples[accepted_indices, ]
+  accepted_distances <- all_distances[accepted_indices]
+  
+  return(list(
+    samples = accepted_samples,
+    distances = accepted_distances,
+    all_samples = all_samples,
+    all_distances = all_distances
+  ))
+}
+
+# ABC
+set.seed(789)
+abc_results <- rejection_abc(
+  test_X, 
+  test_target, 
+  train_theta, 
+  top_param_indices, 
+  prior_bounds,
+  n_samples = 5000, 
+  acceptance_rate = 0.05
+)
+
+# display summary of accepted samples
+cat("Summary of accepted parameter samples:\n")
+print(summary(abc_results$samples))
+
+cat("Mean accepted distance:", mean(abc_results$distances), "\n")
+```
+
+## Visualizing ABC Results
+```{r}
+# create data frames for visualization
+accepted_df <- data.frame(
+  Param1 = abc_results$samples[, 1],
+  Param2 = abc_results$samples[, 2],
+  Distance = abc_results$distances
+)
+
+# joint posterior distribution
+ggplot(accepted_df, aes(x = Param1, y = Param2)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_point(data = data.frame(
+    Param1 = train_theta[top_param_indices[1]],
+    Param2 = train_theta[top_param_indices[2]]
+  ), color = "red", size = 5, shape = "+") +
+  labs(
+    title = "Joint Posterior Distribution from ABC",
+    x = paste("Parameter", top_param_indices[1]),
+    y = paste("Parameter", top_param_indices[2])
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+
+# marginal posterior distributions
+par(mfrow = c(1, 2))
+
+# first parameter
+hist(abc_results$samples[, 1], breaks = 20, 
+     main = paste("Marginal Posterior for Parameter", top_param_indices[1]),
+     xlab = paste("Parameter", top_param_indices[1]),
+     col = "skyblue", border = "white")
+abline(v = train_theta[top_param_indices[1]], col = "red", lwd = 2, lty = 2)
+
+# second parameter
+hist(abc_results$samples[, 2], breaks = 20, 
+     main = paste("Marginal Posterior for Parameter", top_param_indices[2]),
+     xlab = paste("Parameter", top_param_indices[2]),
+     col = "lightgreen", border = "white")
+abline(v = train_theta[top_param_indices[2]], col = "red", lwd = 2, lty = 2)
+
+# reset plot layout
+par(mfrow = c(1, 1))
+```
+
+## Joint and Marginal Posterior Distribution
+```{r}
+# calculate 95% credible intervals for the parameters
+ci_param1 <- quantile(abc_results$samples[, 1], c(0.025, 0.975))
+ci_param2 <- quantile(abc_results$samples[, 2], c(0.025, 0.975))
+
+cat("95% Credible interval for Parameter", top_param_indices[1], ":", ci_param1, "\n")
+cat("95% Credible interval for Parameter", top_param_indices[2], ":", ci_param2, "\n")
+
+# create density plots with credible intervals
+par(mfrow = c(1, 2))
+
+# first parameter density
+plot(density(abc_results$samples[, 1]), 
+     main = paste("Parameter", top_param_indices[1], "Posterior"),
+     xlab = paste("Parameter", top_param_indices[1]),
+     col = "blue", lwd = 2)
+abline(v = train_theta[top_param_indices[1]], col = "red", lwd = 2, lty = 2)
+abline(v = ci_param1, col = "darkblue", lwd = 1, lty = 3)
+legend("topright", 
+       legend = c("Posterior Density", "Point Estimate", "95% Credible Interval"),
+       col = c("blue", "red", "darkblue"), 
+       lty = c(1, 2, 3), 
+       lwd = c(2, 2, 1))
+
+# second parameter density
+plot(density(abc_results$samples[, 2]), 
+     main = paste("Parameter", top_param_indices[2], "Posterior"),
+     xlab = paste("Parameter", top_param_indices[2]),
+     col = "green", lwd = 2)
+abline(v = train_theta[top_param_indices[2]], col = "red", lwd = 2, lty = 2)
+abline(v = ci_param2, col = "darkgreen", lwd = 1, lty = 3)
+legend("topright", 
+       legend = c("Posterior Density", "Point Estimate", "95% Credible Interval"),
+       col = c("green", "red", "darkgreen"), 
+       lty = c(1, 2, 3), 
+       lwd = c(2, 2, 1))
+
+# reset plot layout
+par(mfrow = c(1, 1))
+```
+
