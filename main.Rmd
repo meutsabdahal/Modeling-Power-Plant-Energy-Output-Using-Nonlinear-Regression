@@ -63,17 +63,6 @@ combined_df <- data.frame(
 # summary statistics
 summary_stats <- summary(combined_df)
 print(summary_stats)
-
-# additional statistics
-additional_stats <- data.frame(
-  Standard_Deviation = sapply(combined_df, sd),
-  IQR = sapply(combined_df, IQR),
-  Skewness = sapply(combined_df, function(x) {
-    (mean(x) - median(x)) / sd(x)
-  })
-)
-
-kable(additional_stats, caption = "Additional Statistics for Each Variable")
 ```
 
 # Task 1: Preliminary Data Analysis
@@ -257,536 +246,439 @@ par(mfrow = c(1, 1))
 
 ```
 
-# Task 2: Regression - Modelling the Between the Gene Expression
+# Task 2: Regression Modeling
+## Model Definitions
 ```{r}
-# candidate nonlinear polynomial regression models
-model1<-function(X, theta){
-  theta[1]*X$x4 + theta[2]*X$x3^2 + theta[3]
+# model 1: uses relative humidity and squared ambient pressure
+model1 <- function(X, theta) {
+  return(theta[1] * X$x4 + theta[2] * X$x3^2 + theta[3])
 }
 
-model2<-function(X, theta){
-  theta[1]*X$x4 + theta[2]*X$x3^2 + theta[3]*X$x5 + theta[4]
+# model 2: extends Model 1 by adding exhaust vacuum
+model2 <- function(X, theta) {
+  return(theta[1] * X$x4 + theta[2] * X$x3^2 + theta[3] * X$x5 + theta[4])
 }
 
-model3<-function(X, theta){
-  theta[1]*X$x3 + theta[2]*X$x4 + theta[3]*X$x5^3
+# model 3: uses ambient pressure, relative humidity, and cubed exhaust vacuum
+model3 <- function(X, theta) {
+  return(theta[1] * X$x3 + theta[2] * X$x4 + theta[3] * X$x5^3)
 }
 
-model4<-function(X, theta){
-  theta[1]*X$x4 + theta[2]*X$x3^2 + theta[3]*X$x5^3 + theta[4]
+# model 4: uses relative humidity, squared ambient pressure, and cubed exhaust vacuum
+model4 <- function(X, theta) {
+  return(theta[1] * X$x4 + theta[2] * X$x3^2 + theta[3] * X$x5^3 + theta[4])
 }
 
-model5<-function(X, theta){
-  theta[1]*X$x4 + theta[2]*X$x1^2 + theta[3]*X$x3^2 + theta[4]
+# model 5: uses relative humidity, squared temperature, and squared ambient pressure
+model5 <- function(X, theta) {
+  return(theta[1] * X$x4 + theta[2] * X$x1^2 + theta[3] * X$x3^2 + theta[4])
 }
 ```
 
-# Task 2.1: estimation of model parameters (theta) for every candidate model using least square
-```{r}
-# convert matrix into dataframe
-X<-as.data.frame(features)
 
-theta_ridge<-function(X, y, lambda=1e-1){
-  X_bias<-cbind(1, as.matrix(X))
-  XtX <- t(X_bias) %*% X_bias  # compute X^T * X
-  XtX_reg <- XtX + lambda * diag(c(0, rep(1, ncol(X)))) # regularization term 
-  theta <- ginv(XtX_reg) %*% t(X_bias) %*% y # generalized inverse to solve
+## Task 2.1: Parameter Estimation Using Ridge Regression
+```{r}
+# convert features matrix into dataframe for easier access in model functions
+X <- as.data.frame(features)
+
+# define ridge regression function with regularization parameter lambda
+theta_ridge <- function(X, y, lambda = 1e-1) {
+  X_bias <- cbind(1, as.matrix(X))
+  
+  # compute X^T * X
+  XtX <- t(X_bias) %*% X_bias
+  
+  # add regularization term to diagonal 
+  XtX_reg <- XtX + lambda * diag(c(0, rep(1, ncol(X))))
+  
+  # solve using generalized inverse: (X^T*X + λI)^(-1) * X^T * y
+  theta <- ginv(XtX_reg) %*% t(X_bias) %*% y
+  
   return(theta)
 }
-```
 
-```{r}
-# theta for model 1
+# parameters for Model 1
 X_model1 <- data.frame(x4 = X$x4, x3 = X$x3^2)
 theta_model1 <- theta_ridge(X_model1, target)
-print("Theta Model 1:")
+cat("Model 1 Parameters:\n")
 print(theta_model1)
-```
 
-```{r}
-# theta for model 2
+# parameters for Model 2
 X_model2 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5)
 theta_model2 <- theta_ridge(X_model2, target)
-print("Theta Model 2:")
+cat("\nModel 2 Parameters:\n")
 print(theta_model2)
-```
 
-```{r}
-X_model3 <- data.frame(x3 = X$x3, x4 = X$x4, x5 = X$x5^3)  
+# parameters for Model 3
+X_model3 <- data.frame(x3 = X$x3, x4 = X$x4, x5 = X$x5^3)
 theta_model3 <- theta_ridge(X_model3, target)
-print("Theta for Model 3:")
+cat("\nModel 3 Parameters:\n")
 print(theta_model3)
 
-```
-
-```{r}
-X_model4 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5^3) 
+# parameters for Model 4
+X_model4 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5^3)
 theta_model4 <- theta_ridge(X_model4, target)
-print("Theta for Model 4:")
+cat("\nModel 4 Parameters:\n")
 print(theta_model4)
-```
 
-```{r}
+# parameters for Model 5
 X_model5 <- data.frame(x4 = X$x4, x1 = X$x1^2, x3 = X$x3^2)
 theta_model5 <- theta_ridge(X_model5, target)
-print("Theta for Model 5:")
+cat("\nModel 5 Parameters:\n")
 print(theta_model5)
 ```
 
-# Task 2.2: Model Residual Sum of Squared Error (RSS)
+## Task 2.2: Model Residual Sum of Squared Error (RSS)
 ```{r}
-compute_rss<-function(X,y,theta,model){
-  y_pred<-model(X, theta) 
-  rss<-sum((y-y_pred)^2)
+# define function to compute Residual Sum of Squares (RSS)
+compute_rss <- function(X, y, theta, model) {
+  # generate predictions using the model
+  y_pred <- model(X, theta)
+  
+  # calculate RSS as sum of squared differences between actual and predicted values
+  rss <- sum((y - y_pred)^2)
+  
   return(rss)
 }
-```
 
-```{r}
-# RSS for model1
+# calculate RSS for each model
 rss_model1 <- compute_rss(X_model1, target, theta_model1, model1)
-print("Model 1 RSS:")
+rss_model2 <- compute_rss(X_model2, target, theta_model2, model2)
+rss_model3 <- compute_rss(X_model3, target, theta_model3, model3)
+rss_model4 <- compute_rss(X_model4, target, theta_model4, model4)
+rss_model5 <- compute_rss(X_model5, target, theta_model5, model5)
+
+cat("Model 1 RSS:\n")
 print(rss_model1)
-```
 
-```{r}
-rss_model2<-compute_rss(X_model2, target, theta_model2, model2)
-print("Model 2 RSS:")
+cat("\nModel 2 RSS:\n")
 print(rss_model2)
-```
 
-```{r}
-rss_model3<-compute_rss(X_model3, target, theta_model3, model3)
-print("Model 3 RSS:")
+cat("\nModel 3 RSS:\n")
 print(rss_model3)
-```
 
-```{r}
-rss_model4<-compute_rss(X_model4, target, theta_model4, model4)
-print("Model 4 RSS:")
+cat("\nModel 4 RSS:\n")
 print(rss_model4)
-```
 
-```{r}
-rss_model5<-compute_rss(X_model5,target,theta_model5,model5)
-print("Model 5 RSS:")
+cat("Model 5 RSS:\n")
 print(rss_model5)
 ```
 
-# Log-likelihood function
+## Task 2.3: Log-likelihood and Variance Calculation
 ```{r}
-compute_loglikelihood_variance<-function(rss, n){
-  sigma_squared <- rss/(n-1)
-  log_likelihood<- -(n/2)*log(2*pi)-(n/2)*log(sigma_squared)-(1/(2*sigma_squared))*rss
-  return(list(log_likelihood=log_likelihood,variance=sigma_squared))
+# define function to compute log-likelihood and variance
+compute_loglikelihood_variance <- function(rss, n) {
+  # estimate error variance from RSS
+  sigma_squared <- rss / (n - 1)
+  
+  # compute log-likelihood under Gaussian error assumption
+  log_likelihood <- -(n/2) * log(2 * pi) - (n/2) * log(sigma_squared) - 
+                   (1/(2 * sigma_squared)) * rss
+  
+  return(list(log_likelihood = log_likelihood, variance = sigma_squared))
 }
+
+# calculate log-likelihood and variance for each model
+n_samples <- length(target)  # number of observations
+
+# model 1
+compute_model1 <- compute_loglikelihood_variance(rss_model1, n_samples)
+model1_log_likelihood <- compute_model1$log_likelihood
+model1_variance <- compute_model1$variance
+
+# model 2
+compute_model2 <- compute_loglikelihood_variance(rss_model2, n_samples)
+model2_log_likelihood <- compute_model2$log_likelihood
+model2_variance <- compute_model2$variance
+
+# model 3
+compute_model3 <- compute_loglikelihood_variance(rss_model3, n_samples)
+model3_log_likelihood <- compute_model3$log_likelihood
+model3_variance <- compute_model3$variance
+
+# model 4
+compute_model4 <- compute_loglikelihood_variance(rss_model4, n_samples)
+model4_log_likelihood <- compute_model4$log_likelihood
+model4_variance <- compute_model4$variance
+
+# model 5
+compute_model5 <- compute_loglikelihood_variance(rss_model5, n_samples)
+model5_log_likelihood <- compute_model5$log_likelihood
+model5_variance <- compute_model5$variance
+
+
+cat("Model 1:")
+cat("\nLog-likelihood:", model1_log_likelihood)
+cat("\nVariance:", model1_variance)
+
+cat("\n\nModel 2:")
+cat("\nLog-likelihood:", model2_log_likelihood)
+cat("\nVariance:", model2_variance)
+
+cat("\n\nModel 3:")
+cat("\nLog-likelihood:", model3_log_likelihood)
+cat("\nVariance:", model3_variance)
+
+cat("\n\nModel 4:")
+cat("\nLog-likelihood:", model4_log_likelihood)
+cat("\nVariance:", model4_variance)
+
+cat("\n\nModel 5:")
+cat("\nLog-likelihood:", model5_log_likelihood)
+cat("\nVariance:", model5_variance)
 ```
 
+## Task 2.4: Compute AIC and BIC
 ```{r}
-# log likelihood and variance model1
-compute_model1<-compute_loglikelihood_variance(rss_model1, length(target))
-model1_log_likelihood<-compute_model1$log_likelihood
-model1_variance<-compute_model1$variance
-print("Model 1 Log-Likelihood:")
-print(model1_log_likelihood)
-print("Model 1 Variance:")
-print(model1_variance)
-```
-
-```{r}
-# log likelihood and variance model2
-compute_model2<-compute_loglikelihood_variance(rss_model2, length(target))
-model2_log_likelihood<-compute_model2$log_likelihood
-model2_variance<-compute_model2$variance
-print("Model 2 Log-Likelihood:")
-print(model2_log_likelihood)
-print("Model 2 Variance:")
-print(model2_variance)
-```
-
-```{r}
-# log likelihood and variance model3
-compute_model3<-compute_loglikelihood_variance(rss_model3, length(target))
-model3_log_likelihood<-compute_model3$log_likelihood
-model3_variance<-compute_model3$variance
-print("Model 3 Log-Likelihood:")
-print(model3_log_likelihood)
-print("Model 3 Variance:")
-print(model3_variance)
-```
-
-```{r}
-# log likelihood and variance model4
-compute_model4<-compute_loglikelihood_variance(rss_model4, length(target))
-model4_log_likelihood<-compute_model4$log_likelihood
-model4_variance<-compute_model4$variance
-print("Model 4 Log-Likelihood:")
-print(model4_log_likelihood)
-print("Model 4 Variance:")
-print(model4_variance)
-```
-
-```{r}
-# log likelihood and variance model5
-compute_model5<-compute_loglikelihood_variance(rss_model5, length(target))
-model5_log_likelihood<-compute_model5$log_likelihood
-model5_variance<-compute_model5$variance
-print("Model 5 Log-Likelihood:")
-print(model5_log_likelihood)
-print("Model 5 Variance")
-print(model5_variance)
-```
-
-# Compute AIC and BIC
-```{r}
-# calculate aic
-compute_aic<-function(log_likelihood, k){
-  aic<-2 * k - 2 * log_likelihood
+# define functions to compute AIC and BIC
+compute_aic <- function(log_likelihood, k) {
+  aic <- 2 * k - 2 * log_likelihood
   return(aic)
 }
 
-# calculate bic
-compute_bic<-function(log_likelihood, k, n){
+compute_bic <- function(log_likelihood, k, n) {
   bic <- k * log(n) - 2 * log_likelihood
   return(bic)
 }
+
+model1_k <- length(theta_model1)
+model2_k <- length(theta_model2)
+model3_k <- length(theta_model3)
+model4_k <- length(theta_model4)
+model5_k <- length(theta_model5)
+
+# Calculate AIC and BIC for each model
+model1_aic <- compute_aic(model1_log_likelihood, model1_k)
+model1_bic <- compute_bic(model1_log_likelihood, model1_k, n_samples)
+
+model2_aic <- compute_aic(model2_log_likelihood, model2_k)
+model2_bic <- compute_bic(model2_log_likelihood, model2_k, n_samples)
+
+model3_aic <- compute_aic(model3_log_likelihood, model3_k)
+model3_bic <- compute_bic(model3_log_likelihood, model3_k, n_samples)
+
+model4_aic <- compute_aic(model4_log_likelihood, model4_k)
+model4_bic <- compute_bic(model4_log_likelihood, model4_k, n_samples)
+
+model5_aic <- compute_aic(model5_log_likelihood, model5_k)
+model5_bic <- compute_bic(model5_log_likelihood, model5_k, n_samples)
+
+cat("Model 1:")
+cat("\nAIC:", model1_aic)
+cat("\nBIC:", model1_bic)
+
+cat("\n\nModel 2:")
+cat("\nAIC:", model2_aic)
+cat("\nBIC:", model2_bic)
+
+cat("\n\nModel 3:")
+cat("\nAIC:", model3_aic)
+cat("\nBIC:", model3_bic)
+
+cat("\n\nModel 4:")
+cat("\nAIC:", model4_aic)
+cat("\nBIC:", model4_bic)
+
+cat("\n\nModel 5:")
+cat("\nAIC:", model5_aic)
+cat("\nBIC:", model5_bic)
 ```
 
-```{r}
-# aic and bic model 1
-model1_k<-length(theta_model1)
-model1_aic<-compute_aic(model1_log_likelihood, model1_k)
-model1_bic<-compute_bic(model1_log_likelihood, model1_k, length(target))
-print("Model 1 AIC:")
-print(model1_aic)
-print("Model 1 BIC:")
-print(model1_bic)
-```
 
+## Task 2.5: Distribution of Model Prediction Errors
 ```{r}
-# aic and bic model 2
-model2_k<-length(theta_model2)
-model2_aic<-compute_aic(model2_log_likelihood, model2_k)
-model2_bic<-compute_bic(model2_log_likelihood, model2_k, length(target))
-print("Model 2 AIC:")
-print(model2_aic)
-print("Model 2 BIC:")
-print(model2_bic)
-```
-
-```{r}
-# aic and bic model 3
-model3_k<-length(theta_model3)
-model3_aic<-compute_aic(model3_log_likelihood, model3_k)
-model3_bic<-compute_bic(model3_log_likelihood, model3_k, length(target))
-print("Model 3 AIC:")
-print(model3_aic)
-print("Model 3 BIC:")
-print(model3_bic)
-```
-
-```{r}
-# aic and bic model 4
-model4_k<-length(theta_model4)
-model4_aic<-compute_aic(model4_log_likelihood, model4_k)
-model4_bic<-compute_bic(model4_log_likelihood, model4_k, length(target))
-print("Model 4 AIC:")
-print(model4_aic)
-print("Model 4 BIC:")
-print(model4_bic)
-```
-
-```{r}
-# aic and bic model 5
-model5_k<-length(theta_model5)
-model5_aic<-compute_aic(model5_log_likelihood, model5_k)
-model5_bic<-compute_bic(model5_log_likelihood, model5_k, length(target))
-print("Model 5 AIC:")
-print(model5_aic)
-print("Model 5 BIC:")
-print(model5_bic)
-```
-
-# Task 2.5: Distributin of model prediction errors
-```{r}
-compute_model_prediction_error<-function(X, y, theta, model){
-  y_pred<-model(X, theta)
-  prediction_error<-y - y_pred
+# define function to compute model prediction errors (residuals)
+compute_model_prediction_error <- function(X, y, theta, model) {
+  # generate predictions using the model
+  y_pred <- model(X, theta)
+  
+  # calculate prediction errors/residuals
+  prediction_error <- y - y_pred
+  
   return(prediction_error)
 }
-```
 
-```{r}
-# QQ plot for model 1 distribution
+# calculate prediction errors for each model
 prediction_error_model1 <- compute_model_prediction_error(X_model1, target, theta_model1, model1)
-qqnorm(prediction_error_model1, main = "Q-Q Plot of Prediction Error for Model 1")
-qqline(prediction_error_model1)  
-```
-
-```{r}
-# QQ plot for model 2 distribution
 prediction_error_model2 <- compute_model_prediction_error(X_model2, target, theta_model2, model2)
-qqnorm(prediction_error_model2, main = "Q-Q Plot of Prediction Error for Model 2")
-qqline(prediction_error_model2)  
-```
-
-```{r}
-# QQ plot for model 3 distribution
 prediction_error_model3 <- compute_model_prediction_error(X_model3, target, theta_model3, model3)
-qqnorm(prediction_error_model3, main = "Q-Q Plot of Prediction Error for Model 3")
-qqline(prediction_error_model3)  
-```
-
-```{r}
-# QQ plot for model 4 distribution
 prediction_error_model4 <- compute_model_prediction_error(X_model4, target, theta_model4, model4)
-qqnorm(prediction_error_model4, main = "Q-Q Plot of Prediction Error for Model 4")
-qqline(prediction_error_model4)  
-```
-
-```{r}
-# QQ plot for model 5 distribution
 prediction_error_model5 <- compute_model_prediction_error(X_model5, target, theta_model5, model5)
-qqnorm(prediction_error_model5, main = "Q-Q Plot of Prediction Error for Model 5")
-qqline(prediction_error_model5)  
-```
 
-# Task 2.7 train Test Split
-```{r}
-set.seed(42)  # for reproducibility
+# create enhanced QQ plots to check for normality of residuals
+par(mfrow = c(2, 3), mar = c(4, 4, 3, 1))
 
-# Create the full design matrix for Model 5
-X_model5 <- data.frame(
-  x4 = X$x4,
-  x1 = X$x1^2,
-  x3 = X$x3^2
-)
-y <- target
-
-# --- 1. Split into training and testing sets (70/30) ---
-n <- nrow(X_model5)
-train_idx <- sample(1:n, size = round(0.7 * n))
-test_idx <- setdiff(1:n, train_idx)
-
-X_train <- X_model5[train_idx, ]
-y_train <- y[train_idx, , drop = FALSE]
-X_test <- X_model5[test_idx, ]
-y_test <- y[test_idx, , drop = FALSE]
-
-# --- 2. Estimate theta on training data ---
-library(MASS)
-
-theta_ridge <- function(X, y, lambda = 1e-1) {
-  X_bias <- cbind(1, as.matrix(X))
-  XtX <- t(X_bias) %*% X_bias
-  XtX_reg <- XtX + lambda * diag(c(0, rep(1, ncol(X))))
-  theta <- ginv(XtX_reg) %*% t(X_bias) %*% y
-  return(theta)
+# function to create enhanced QQ plot
+create_enhanced_qq <- function(residuals, model_name) {
+  # generate QQ plot
+  qqnorm(residuals, main = paste("Q-Q Plot of Residuals for", model_name),
+         col = "blue", pch = 19, cex = 0.5)
+  qqline(residuals, col = "red", lwd = 2)
+  
 }
 
-theta_hat <- theta_ridge(X_train, y_train)
+# create QQ plots for all models
+create_enhanced_qq(prediction_error_model1, "Model 1")
+create_enhanced_qq(prediction_error_model2, "Model 2")
+create_enhanced_qq(prediction_error_model3, "Model 3")
+create_enhanced_qq(prediction_error_model4, "Model 4")
+create_enhanced_qq(prediction_error_model5, "Model 5")
 
-# --- 3. Make predictions on the test set ---
-X_test_bias <- cbind(1, as.matrix(X_test))
-y_pred <- X_test_bias %*% theta_hat
-
-# --- 4. Compute 95% confidence intervals ---
-# Residual standard error from training data
-X_train_bias <- cbind(1, as.matrix(X_train))
-y_train_pred <- X_train_bias %*% theta_hat
-residuals_train <- y_train - y_train_pred
-rss <- sum(residuals_train^2)
-df <- nrow(X_train) - length(theta_hat)
-sigma2 <- rss / df
-
-# Standard errors of predictions
-XtX_inv <- ginv(t(X_train_bias) %*% X_train_bias + 1e-1 * diag(c(0, rep(1, ncol(X_train)))))
-se_pred <- sqrt(diag(X_test_bias %*% XtX_inv %*% t(X_test_bias)) * sigma2)
-
-# 95% confidence intervals
-lower_bound <- y_pred - 1.96 * se_pred
-upper_bound <- y_pred + 1.96 * se_pred
-
-# --- 5. Plot predictions, confidence intervals, and actual values ---
-plot(y_test, type = 'p', col = 'black', pch = 16,
-     ylab = "Target", xlab = "Test Sample Index", main = "Model 5 Prediction with 95% CI")
-points(y_pred, col = 'blue', pch = 17)
-arrows(1:length(y_pred), lower_bound, 1:length(y_pred), upper_bound, 
-       length = 0.05, angle = 90, code = 3, col = 'red')
-
-legend("topleft", legend = c("True y", "Predicted y", "95% CI"), 
-       col = c("black", "blue", "red"), pch = c(16, 17, NA), lty = c(NA, NA, 1))
-
+# reset plot layout
+par(mfrow = c(1, 1))
 ```
 
 ```{r}
-install.packages("gridExtra")
-```
-
-
-```{r}
-set.seed(42)
-
-# --- 1) Prepare ---
-
-# Your estimated coefficients from Task 2 (ridge regression)
-theta_hat_vec <- as.vector(theta_hat)  # includes intercept + 3 params
-names(theta_hat_vec) <- c("intercept", colnames(X_train))
-
-# Find indices of 2 largest absolute coefficients (excluding intercept)
-abs_coefs <- abs(theta_hat_vec[-1])  
-top2_idx <- order(abs_coefs, decreasing = TRUE)[1:2]
-param_names <- names(abs_coefs)[top2_idx]
-
-cat("Selected parameters for ABC:", param_names, "\n")
-
-# Fix other parameters at estimated values
-fixed_params <- theta_hat_vec[-c(1, top2_idx + 1)]  # exclude intercept and top2
-
-# --- 2) Define simulation function based on model ---
-
-simulate_y <- function(X_data, theta_vec, sigma_sq) {
-  # theta_vec = c(intercept, coef_x4, coef_x1_squared, coef_x3_squared)
-  mu <- theta_vec[1] + 
-        theta_vec[2] * X_data$x4 + 
-        theta_vec[3] * X_data$x1 + 
-        theta_vec[4] * X_data$x3
-  y_sim <- rnorm(nrow(X_data), mean = mu, sd = sqrt(sigma_sq))
-  return(y_sim)
-}
-
-# --- 3) Define prior sampler for the 2 params ---
-
-# Get estimated values for the two parameters
-theta_1_hat <- theta_hat_vec[top2_idx[1] + 1]  # +1 for intercept offset
-theta_2_hat <- theta_hat_vec[top2_idx[2] + 1]
-
-# Define ±10% prior range around estimated values
-prior_range_1 <- c(theta_1_hat * 0.9, theta_1_hat * 1.1)
-prior_range_2 <- c(theta_2_hat * 0.9, theta_2_hat * 1.1)
-
-# Use estimated sigma_sq from training residuals
-sigma_sq_hat <- sigma2
-
-prior_sampler <- function() {
-  theta_1 <- runif(1, min = min(prior_range_1), max = max(prior_range_1))
-  theta_2 <- runif(1, min = min(prior_range_2), max = max(prior_range_2))
-  list(theta_1 = theta_1, theta_2 = theta_2, sigma_sq = sigma_sq_hat)
-}
-
-# --- 4) Calculate summary statistics ---
-
-calc_summary_stats <- function(y_vec) {
-  c(mean = mean(y_vec), var = var(y_vec))
-}
-
-S_obs <- calc_summary_stats(y_train)
-
-# --- 5) Distance metric ---
-
-distance_metric <- function(S_sim, S_obs) {
-  sqrt(sum((S_sim - S_obs)^2))
-}
-
-# --- 6) ABC rejection ---
-
-N_sim <- 10000  # number of simulations (increase for better posterior)
-
-pilot_runs <- 1000  # for epsilon selection
-pilot_distances <- numeric(pilot_runs)
-
-cat("Pilot run to select epsilon...\n")
-for (i in 1:pilot_runs) {
-  sample_params <- prior_sampler()
-  
-  # Build full theta vector: intercept + top2 params + fixed params
-  theta_full <- numeric(length(theta_hat_vec))
-  theta_full[1] <- theta_hat_vec[1]  # intercept fixed
-  theta_full[top2_idx[1] + 1] <- sample_params$theta_1
-  theta_full[top2_idx[2] + 1] <- sample_params$theta_2
-  
-  # fixed params fill others
-  fixed_names <- names(fixed_params)
-  for (name in fixed_names) {
-    pos <- which(names(theta_hat_vec) == name)
-    theta_full[pos] <- fixed_params[name]
-  }
-  
-  y_sim <- simulate_y(X_train, theta_full, sample_params$sigma_sq)
-  S_sim <- calc_summary_stats(y_sim)
-  pilot_distances[i] <- distance_metric(S_sim, S_obs)
-}
-
-finite_dists <- pilot_distances[is.finite(pilot_distances)]
-if (length(finite_dists) == 0) stop("No finite distances in pilot run!")
-
-epsilon <- quantile(finite_dists, 0.05)
-cat("Chosen epsilon (5th percentile):", epsilon, "\n")
-
-# --- 7) Rejection ABC ---
-
-accepted_thetas <- matrix(NA, nrow = N_sim, ncol = 2)
-accepted_count <- 0
-
-cat("Starting ABC rejection sampling...\n")
-pb <- txtProgressBar(min = 0, max = N_sim, style = 3)
-
-for (i in 1:N_sim) {
-  sample_params <- prior_sampler()
-  
-  theta_full <- numeric(length(theta_hat_vec))
-  theta_full[1] <- theta_hat_vec[1]
-  theta_full[top2_idx[1] + 1] <- sample_params$theta_1
-  theta_full[top2_idx[2] + 1] <- sample_params$theta_2
-  for (name in fixed_names) {
-    pos <- which(names(theta_hat_vec) == name)
-    theta_full[pos] <- fixed_params[name]
-  }
-  
-  y_sim <- simulate_y(X_train, theta_full, sample_params$sigma_sq)
-  S_sim <- calc_summary_stats(y_sim)
-  dist <- distance_metric(S_sim, S_obs)
-  
-  if (is.finite(dist) && dist < epsilon) {
-    accepted_count <- accepted_count + 1
-    accepted_thetas[accepted_count, ] <- c(sample_params$theta_1, sample_params$theta_2)
-  }
-  
-  setTxtProgressBar(pb, i)
-}
-close(pb)
-
-accepted_thetas <- accepted_thetas[1:accepted_count, , drop = FALSE]
-cat("Number of accepted samples:", accepted_count, "\n")
-
-# --- 8) Plot results ---
-
-library(ggplot2)
-library(gridExtra)
-
-df_post <- data.frame(
-  param1 = accepted_thetas[,1],
-  param2 = accepted_thetas[,2]
+# compile all model evaluation metrics into a comprehensive table
+model_comparison <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  Parameters = c(model1_k, model2_k, model3_k, model4_k, model5_k),
+  RSS = c(rss_model1, rss_model2, rss_model3, rss_model4, rss_model5),
+  LogLikelihood = c(model1_log_likelihood, model2_log_likelihood, 
+                   model3_log_likelihood, model4_log_likelihood, 
+                   model5_log_likelihood),
+  AIC = c(model1_aic, model2_aic, model3_aic, model4_aic, model5_aic),
+  BIC = c(model1_bic, model2_bic, model3_bic, model4_bic, model5_bic),
+  Variance = c(model1_variance, model2_variance, model3_variance, 
+              model4_variance, model5_variance)
 )
 
-p1 <- ggplot(df_post, aes(x = param1)) +
-  geom_histogram(aes(y=..density..), bins = 30, fill = "skyblue", color = "black") +
-  geom_vline(xintercept = theta_1_hat, color = "red", linetype = "dashed") +
-  labs(title = paste("Posterior of", param_names[1]), x = param_names[1])
+# display the comprehensive table
+kable(model_comparison, 
+      caption = "Comprehensive Comparison of All Models", 
+      digits = c(0, 0, 2, 2, 2, 2, 4))
 
-p2 <- ggplot(df_post, aes(x = param2)) +
-  geom_histogram(aes(y=..density..), bins = 30, fill = "lightgreen", color = "black") +
-  geom_vline(xintercept = theta_2_hat, color = "red", linetype = "dashed") +
-  labs(title = paste("Posterior of", param_names[2]), x = param_names[2])
+# rank models based on different criteria
+rank_rss <- rank(model_comparison$RSS)
+rank_aic <- rank(model_comparison$AIC)
+rank_bic <- rank(model_comparison$BIC)
+rank_loglik <- rank(-model_comparison$LogLikelihood)  # Negative because higher is better
 
-p_joint <- ggplot(df_post, aes(x = param1, y = param2)) +
-  geom_point(alpha = 0.4, color = "blue") +
-  geom_vline(xintercept = theta_1_hat, linetype = "dashed", color = "red") +
-  geom_hline(yintercept = theta_2_hat, linetype = "dashed", color = "red") +
-  labs(title = "Joint Posterior Distribution", x = param_names[1], y = param_names[2])
+ranking_table <- data.frame(
+  Model = model_comparison$Model,
+  RSS_Rank = rank_rss,
+  AIC_Rank = rank_aic,
+  BIC_Rank = rank_bic,
+  LogLikelihood_Rank = rank_loglik,
+  Overall_Rank = rank_rss + rank_aic + rank_bic + rank_loglik
+)
 
-grid.arrange(p1, p2, p_joint, ncol = 2)
+# sort by overall rank (lower is better)
+ranking_table <- ranking_table[order(ranking_table$Overall_Rank),]
 
+# display the ranking table
+kable(ranking_table, 
+      caption = "Model Ranking Based on Different Criteria (Lower is Better)")
 
+# determine the best model based on our criteria
+best_model_index <- which.min(model_comparison$AIC)
+best_model_name <- model_comparison$Model[best_model_index]
+
+cat(paste("Based on AIC, the best model is:", best_model_name, "\n"))
+cat(paste("Based on BIC, the best model is:", model_comparison$Model[which.min(model_comparison$BIC)], "\n"))
+cat(paste("Based on Log-Likelihood, the best model is:", model_comparison$Model[which.max(model_comparison$LogLikelihood)], "\n"))
+cat(paste("Based on RSS, the best model is:", model_comparison$Model[which.min(model_comparison$RSS)], "\n"))
+```
+
+## Train-Test Split
+```{r}
+set.seed(123)
+
+# create indices for 70% train, 30% test split
+sample_size <- nrow(features)
+train_indices <- sample(sample_size, size = round(0.7 * sample_size))
+test_indices <- setdiff(1:sample_size, train_indices)
+
+# create training and testing datasets
+train_features <- features[train_indices, ]
+train_target <- target[train_indices, ]
+test_features <- features[test_indices, ]
+test_target <- target[test_indices, ]
+
+train_X <- data.frame(x4 = train_features[,"x4"], 
+                     x1_squared = train_features[,"x1"]^2, 
+                     x3_squared = train_features[,"x3"]^2)
+                     
+test_X <- data.frame(x4 = test_features[,"x4"], 
+                    x1_squared = test_features[,"x1"]^2, 
+                    x3_squared = test_features[,"x3"]^2)
+
+# estimate parameters using training data
+train_theta <- theta_ridge(train_X, train_target)
+cat("Model 5 parameters estimated on training data:\n")
+print(train_theta)
+
+# calculate predictions on test data
+test_predictions <- model5(test_X, train_theta)
+
+# calculate test error metrics
+test_rss <- sum((test_target - test_predictions)^2)
+test_rmse <- sqrt(mean((test_target - test_predictions)^2))
+test_mae <- mean(abs(test_target - test_predictions))
+test_r_squared <- 1 - sum((test_target - test_predictions)^2) / sum((test_target - mean(test_target))^2)
+
+# display test metrics
+test_metrics <- data.frame(
+  Metric = c("RSS", "RMSE", "MAE", "R-squared"),
+  Value = c(test_rss, test_rmse, test_mae, test_r_squared)
+)
+
+kable(test_metrics, caption = "Model Performance on Test Data")
+```
+
+### Calculate Confidence Intervals and Visualization
+```{r}
+# function to compute confidence intervals for predictions
+compute_confidence_intervals <- function(predictions, variance, confidence_level = 0.95) {
+  # number of observations
+  n_obs <- length(predictions)
+  
+  # calculate margin of error for the confidence interval
+  alpha <- 1 - confidence_level
+  t_critical <- qt(1 - alpha/2, df = n_obs - 4)  # 4 parameters in Model 5
+  margin_error <- t_critical * sqrt(variance)
+  
+  # return lower and upper bounds
+  return(list(
+    lower = predictions - margin_error,
+    upper = predictions + margin_error
+  ))
+}
+
+# compute the variance of model prediction errors from training data
+model5_prediction_errors <- train_target - model5(train_X, train_theta)
+model5_prediction_variance <- var(model5_prediction_errors)
+
+# compute 95% confidence intervals
+ci <- compute_confidence_intervals(test_predictions, model5_prediction_variance, 0.95)
+
+# create dataframe for plotting
+plot_data <- data.frame(
+  Observation = 1:length(test_predictions),
+  Actual = test_target,
+  Predicted = test_predictions,
+  Lower_CI = ci$lower,
+  Upper_CI = ci$upper
+)
+
+# create visualization of predictions with confidence intervals
+ggplot(plot_data, aes(x = Observation)) +
+  # plot actual observations
+  geom_point(aes(y = Actual), color = "blue", alpha = 0.5, size = 1.5) +
+  # plot predicted values
+  geom_line(aes(y = Predicted), color = "red", size = 1) +
+  # add confidence interval ribbon
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI), alpha = 0.2, fill = "gray") +
+  # customize plot appearance
+  theme_minimal() +
+  labs(
+    title = "Test Data Predictions with 95% Confidence Intervals - Model 5",
+    x = "Observation Index",
+    y = "Net Hourly Electrical Energy Output (MW)"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
 ```
 
