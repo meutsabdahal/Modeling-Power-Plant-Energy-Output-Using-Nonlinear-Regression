@@ -73,7 +73,6 @@ print(summary_stats)
 features.ts <- ts(features, start = c(min(time), max(time)), frequency = 1)
 
 # create individual time series plots for each input signal
-par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
 
 # plot for temperature (x1)
 plot(features.ts[,"x1"], main = "Time Series - Temperature",
@@ -90,9 +89,6 @@ plot(features.ts[,"x4"], main = "Time Series - Relative Humidity",
 # plot for exhaust vacuum (x5)
 plot(features.ts[,"x5"], main = "Time Series - Exhaust Vacuum",
      xlab = "Time", ylab = "Vacuum (cm Hg)", col = "darkorange")
-
-# reset layout
-par(mfrow = c(1, 1))
 ```
 
 ### Time Series Analysis (Input Signal)
@@ -136,9 +132,6 @@ plot_enhanced_histogram <- function(data, column, title, xlab) {
     labels = sprintf("Mean: %.2f\nSD:   %.2f", mean(data), sd(data)), adj = c(1, 1))
 }
 
-# set up plotting area
-par(mfrow = c(3, 2), mar = c(4, 4, 3, 1))
-
 # histogram for temperature (x1)
 plot_enhanced_histogram(
   features[,"x1"], 
@@ -179,8 +172,6 @@ plot_enhanced_histogram(
   "Net hourly electrical energy output (MW)"
 )
 
-# reset layout to single plot
-par(mfrow = c(1, 1))
 ```
 
 ## Correlation Analysis and Scatter Plots
@@ -247,121 +238,146 @@ par(mfrow = c(1, 1))
 ```
 
 # Task 2: Regression Modeling
-## Model Definitions
-```{r}
-# model 1: uses relative humidity and squared ambient pressure
-model1 <- function(X, theta) {
-  return(theta[1] * X$x4 + theta[2] * X$x3^2 + theta[3])
-}
-
-# model 2: extends Model 1 by adding exhaust vacuum
-model2 <- function(X, theta) {
-  return(theta[1] * X$x4 + theta[2] * X$x3^2 + theta[3] * X$x5 + theta[4])
-}
-
-# model 3: uses ambient pressure, relative humidity, and cubed exhaust vacuum
-model3 <- function(X, theta) {
-  return(theta[1] * X$x3 + theta[2] * X$x4 + theta[3] * X$x5^3)
-}
-
-# model 4: uses relative humidity, squared ambient pressure, and cubed exhaust vacuum
-model4 <- function(X, theta) {
-  return(theta[1] * X$x4 + theta[2] * X$x3^2 + theta[3] * X$x5^3 + theta[4])
-}
-
-# model 5: uses relative humidity, squared temperature, and squared ambient pressure
-model5 <- function(X, theta) {
-  return(theta[1] * X$x4 + theta[2] * X$x1^2 + theta[3] * X$x3^2 + theta[4])
-}
-```
-
-
 ## Task 2.1: Parameter Estimation Using Ridge Regression
-```{r}
-# convert features matrix into dataframe for easier access in model functions
-X <- as.data.frame(features)
 
-# define ridge regression function with regularization parameter lambda
-theta_ridge <- function(X, y, lambda = 1e-1) {
-  X_bias <- cbind(1, as.matrix(X))
-  
-  # compute X^T * X
-  XtX <- t(X_bias) %*% X_bias
-  
-  # add regularization term to diagonal 
-  XtX_reg <- XtX + lambda * diag(c(0, rep(1, ncol(X))))
-  
-  # solve using generalized inverse: (X^T*X + λI)^(-1) * X^T * y
-  theta <- ginv(XtX_reg) %*% t(X_bias) %*% y
-  
-  return(theta)
+```{r}
+lambda_ols_param <- 0     # Setting lambda to 0 for Ordinary Least Squares (no regularization)
+
+# Function to estimate theta using OLS with scaled predictors
+estimate_theta_ols_scaled <- function(X_scaled_no_intercept, y_response_vec, lambda_val) {
+  # Handle intercept-only model (if X_scaled_no_intercept has columns but no rows, or no columns)
+  if (ncol(X_scaled_no_intercept) == 0 && nrow(X_scaled_no_intercept) > 0) {
+    X_final_mat <- matrix(1, nrow = nrow(X_scaled_no_intercept), ncol = 1)     # Design matrix for intercept-only
+    colnames(X_final_mat) <- c("(Intercept)")
+  } else if (nrow(X_scaled_no_intercept) > 0) {     # Model with predictors
+    X_final_mat <- cbind("(Intercept)" = rep(1, nrow(X_scaled_no_intercept)), X_scaled_no_intercept)     # Add intercept column
+  } else {     # No data
+    warning("Input X_scaled_no_intercept has 0 rows.")
+    return(NA)     # Return NA if no data
+  }
+
+  # Check if there are enough data points for the number of parameters
+  if (nrow(X_final_mat) < ncol(X_final_mat)) {
+    warning(paste0("Skipping OLS - not enough rows (", nrow(X_final_mat),
+                  ") for predictors (", ncol(X_final_mat), ")."))
+    return(NA)     # Return NA if not enough data
+  }
+
+  # Calculate theta_hat using the OLS formula with potential regularization (lambda_val)
+  theta_hat <- tryCatch({
+    XtX <- t(X_final_mat) %*% X_final_mat     # X transpose X
+    penalty_matrix <- lambda_val * diag(ncol(X_final_mat))     # Penalty matrix for Ridge regression (0 if lambda_val=0)
+    if (ncol(X_final_mat) > 0) penalty_matrix[1,1] <- 0     # Intercept is typically not penalized
+    XtX_reg <- XtX + penalty_matrix     # Regularized XtX (or just XtX if lambda_val is 0)
+    
+    # Use Moore-Penrose generalized inverse (ginv) for numerical stability
+    estimated_coeffs <- MASS::ginv(XtX_reg) %*% t(X_final_mat) %*% y_response_vec
+    rownames(estimated_coeffs) <- colnames(X_final_mat)     # Assign names to coefficients
+    return(estimated_coeffs)
+  }, error = function(e) {
+    message(paste0("Error calculating theta_hat with OLS: ", e$message))
+    return(NA)     # Return NA on error
+  })
+  return(theta_hat)
 }
 
-# parameters for Model 1
-X_model1 <- data.frame(x4 = X$x4, x3 = X$x3^2)
-theta_model1 <- theta_ridge(X_model1, target)
-cat("Model 1 Parameters:\n")
-print(theta_model1)
+# Initialize lists to store results for all models
+theta_list_all_models <- list()     # To store estimated parameters (theta_hat)
+X_final_processed_list_all_models <- list()     # To store the design matrix (X with intercept and scaled predictors)
 
-# parameters for Model 2
-X_model2 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5)
-theta_model2 <- theta_ridge(X_model2, target)
-cat("\nModel 2 Parameters:\n")
-print(theta_model2)
+# Define model definitions  
+# model 1: uses relative humidity and squared ambient pressure
+# model 2: extends Model 1 by adding exhaust vacuum
+# model 3: uses ambient pressure, relative humidity, and cubed exhaust vacuum
+# model 4: uses relative humidity, squared ambient pressure, and cubed exhaust vacuum
+# model 5: uses relative humidity, squared temperature, and squared ambient pressure
+model_definitions <- list(
+  Model1 = data.frame(x4 = X$x4, x3 = X$x3^2),
+  Model2 = data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5),
+  Model3 = data.frame(x3 = X$x3, x4 = X$x4, x5 = X$x5^3),
+  Model4 = data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5^3),
+  Model5 = data.frame(x4 = X$x4, x1 = X$x1^2, x3 = X$x3^2)
+)
 
-# parameters for Model 3
-X_model3 <- data.frame(x3 = X$x3, x4 = X$x4, x5 = X$x5^3)
-theta_model3 <- theta_ridge(X_model3, target)
-cat("\nModel 3 Parameters:\n")
-print(theta_model3)
+# Loop through each model definition
+for (model_label in names(model_definitions)) {
+  cat("\nTheta for", model_label, "\n")
+  X_raw_current_df <- model_definitions[[model_label]]     # Get raw predictors for the current model
 
-# parameters for Model 4
-X_model4 <- data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5^3)
-theta_model4 <- theta_ridge(X_model4, target)
-cat("\nModel 4 Parameters:\n")
-print(theta_model4)
+  # Skip if model data is null or empty
+  if (is.null(X_raw_current_df) || nrow(X_raw_current_df) == 0) {
+    theta_list_all_models[[model_label]] <- NA
+    X_final_processed_list_all_models[[model_label]] <- NA
+    next
+  }
+  
+  X_raw_current_mat <- as.matrix(X_raw_current_df)     # Convert to matrix
+  X_scaled_current_no_int <- matrix(nrow = nrow(X_raw_current_mat), ncol = 0)     # Initialize scaled matrix (no intercept yet)
 
-# parameters for Model 5
-X_model5 <- data.frame(x4 = X$x4, x1 = X$x1^2, x3 = X$x3^2)
-theta_model5 <- theta_ridge(X_model5, target)
-cat("\nModel 5 Parameters:\n")
-print(theta_model5)
+  # Scale predictors if there are any
+  if (ncol(X_raw_current_mat) > 0) {
+    original_colnames <- colnames(X_raw_current_mat)     # Store original column names
+    # Assign default column names if missing
+    if (is.null(original_colnames)) {
+        original_colnames <- if(ncol(X_raw_current_mat) == 1 && !is.null(names(X_raw_current_df))) names(X_raw_current_df) else paste0("V", 1:ncol(X_raw_current_mat))
+    }
+    X_scaled_temp_mat <- scale(X_raw_current_mat)     # Scale the predictors (center and scale)
+    X_scaled_temp_mat[is.na(X_scaled_temp_mat)] <- 0     # Replace any NA/NaN from scaling (e.g., constant column) with 0
+    X_scaled_current_no_int <- X_scaled_temp_mat
+    colnames(X_scaled_current_no_int) <- original_colnames     # Restore column names
+  }
+
+  # Estimate theta_hat for the current model using scaled predictors
+  current_theta_hat_val <- estimate_theta_ols_scaled(X_scaled_current_no_int, target, lambda_val = lambda_ols_param)
+  theta_list_all_models[[model_label]] <- current_theta_hat_val     # Store estimated theta
+
+  # Store the final processed design matrix (with intercept and scaled predictors)
+  if (!is.null(current_theta_hat_val) && !all(is.na(current_theta_hat_val))) {
+      X_final_processed_list_all_models[[model_label]] <- if (ncol(X_scaled_current_no_int) == 0 && nrow(X_scaled_current_no_int) > 0) {
+          # Design matrix for intercept-only model
+          matrix(1, nrow = nrow(X_scaled_current_no_int), ncol = 1, dimnames = list(NULL, "(Intercept)"))
+      } else if (nrow(X_scaled_current_no_int) > 0) {
+          # Design matrix with intercept and scaled predictors
+          cbind("(Intercept)" = rep(1, nrow(X_scaled_current_no_int)), X_scaled_current_no_int)
+      } else { NA }
+  } else {
+      X_final_processed_list_all_models[[model_label]] <- NA     # Store NA if theta estimation failed
+  }
+  print(current_theta_hat_val)
+}
 ```
 
 ## Task 2.2: Model Residual Sum of Squared Error (RSS)
 ```{r}
-# define function to compute Residual Sum of Squares (RSS)
-compute_rss <- function(X, y, theta, model) {
-  # generate predictions using the model
-  y_pred <- model(X, theta)
+# Function to compute RSS using design matrix and parameters
+compute_rss_matrix <- function(X, y, theta) {
+  # Predict y values using Xθ̂
+  y_pred <- tryCatch(X %*% theta, error = function(e) NULL)
+  if (is.null(y_pred)) return(NA)   # Return NA if prediction fails
   
-  # calculate RSS as sum of squared differences between actual and predicted values
-  rss <- sum((y - y_pred)^2)
-  
-  return(rss)
+  # Compute RSS
+  sum((y - y_pred)^2, na.rm = TRUE) # Sum of squared differences, remove NA if any
 }
 
-# calculate RSS for each model
-rss_model1 <- compute_rss(X_model1, target, theta_model1, model1)
-rss_model2 <- compute_rss(X_model2, target, theta_model2, model2)
-rss_model3 <- compute_rss(X_model3, target, theta_model3, model3)
-rss_model4 <- compute_rss(X_model4, target, theta_model4, model4)
-rss_model5 <- compute_rss(X_model5, target, theta_model5, model5)
+# Prepare design matrices for RSS calculation (including intercept)
+# Use the X_final_processed_list_all_models directly!
+rss_values <- lapply(names(model_definitions), function(model_name) {
+  X_matrix <- X_final_processed_list_all_models[[model_name]]
+  theta <- theta_list_all_models[[model_name]]
+  
+  # Check for NA or NULL and dimension compatibility
+  if (is.null(X_matrix) || any(is.na(X_matrix)) || is.null(theta) || any(is.na(theta)) || ncol(X_matrix) != length(theta)) {
+    return(NA)   # Return NA if there are issues
+  }
+  
+  compute_rss_matrix(X_matrix, target, theta)
+})
+names(rss_values) <- names(model_definitions)
 
-cat("Model 1 RSS:\n")
-print(rss_model1)
-
-cat("\nModel 2 RSS:\n")
-print(rss_model2)
-
-cat("\nModel 3 RSS:\n")
-print(rss_model3)
-
-cat("\nModel 4 RSS:\n")
-print(rss_model4)
-
-cat("Model 5 RSS:\n")
-print(rss_model5)
+# Print the RSS values in the desired format
+for (model_name in names(rss_values)) {
+  cat(model_name, "RSS: ", rss_values[[model_name]], "\n")
+}
 ```
 
 ## Task 2.3: Log-likelihood and Variance Calculation
@@ -381,51 +397,39 @@ compute_loglikelihood_variance <- function(rss, n) {
 # calculate log-likelihood and variance for each model
 n_samples <- length(target)  # number of observations
 
-# model 1
-compute_model1 <- compute_loglikelihood_variance(rss_model1, n_samples)
-model1_log_likelihood <- compute_model1$log_likelihood
-model1_variance <- compute_model1$variance
+loglik_var_list_all_models <- lapply(names(model_definitions), function(model_name) {
+  # Get RSS for the model
+  if (model_name == "Model1") {
+    rss_val <- rss_values[["Model1"]]
+  } else if (model_name == "Model2") {
+    rss_val <- rss_values[["Model2"]]
+  } else if (model_name == "Model3") {
+    rss_val <- rss_values[["Model3"]]
+  } else if (model_name == "Model4") {
+    rss_val <- rss_values[["Model4"]]
+  } else if (model_name == "Model5") {
+    rss_val <- rss_values[["Model5"]]
+  } else {
+    return(list(log_likelihood = NA, variance = NA)) # Handle unexpected model name
+  }
 
-# model 2
-compute_model2 <- compute_loglikelihood_variance(rss_model2, n_samples)
-model2_log_likelihood <- compute_model2$log_likelihood
-model2_variance <- compute_model2$variance
+  if (is.na(rss_val)) {
+    return(list(log_likelihood = NA, variance = NA)) # Return NA if RSS is NA
+  }
 
-# model 3
-compute_model3 <- compute_loglikelihood_variance(rss_model3, n_samples)
-model3_log_likelihood <- compute_model3$log_likelihood
-model3_variance <- compute_model3$variance
-
-# model 4
-compute_model4 <- compute_loglikelihood_variance(rss_model4, n_samples)
-model4_log_likelihood <- compute_model4$log_likelihood
-model4_variance <- compute_model4$variance
-
-# model 5
-compute_model5 <- compute_loglikelihood_variance(rss_model5, n_samples)
-model5_log_likelihood <- compute_model5$log_likelihood
-model5_variance <- compute_model5$variance
+  results <- compute_loglikelihood_variance(rss_val, n_samples)
+  return(results)
+})
+names(loglik_var_list_all_models) <- names(model_definitions) # Assign model names
 
 
-cat("Model 1:")
-cat("\nLog-likelihood:", model1_log_likelihood)
-cat("\nVariance:", model1_variance)
-
-cat("\n\nModel 2:")
-cat("\nLog-likelihood:", model2_log_likelihood)
-cat("\nVariance:", model2_variance)
-
-cat("\n\nModel 3:")
-cat("\nLog-likelihood:", model3_log_likelihood)
-cat("\nVariance:", model3_variance)
-
-cat("\n\nModel 4:")
-cat("\nLog-likelihood:", model4_log_likelihood)
-cat("\nVariance:", model4_variance)
-
-cat("\n\nModel 5:")
-cat("\nLog-likelihood:", model5_log_likelihood)
-cat("\nVariance:", model5_variance)
+# Display the results in your preferred format
+for (model_name in names(loglik_var_list_all_models)) {
+  results <- loglik_var_list_all_models[[model_name]]
+  cat("Model ", gsub("Model", "", model_name), ":\n", sep = "") # Display "Model 1" instead of "Model1"
+  cat("Log-likelihood: ", results$log_likelihood, "\n", sep = "")
+  cat("Variance: ", results$variance, "\n\n", sep = "")
+}
 ```
 
 ## Task 2.4: Compute AIC and BIC
@@ -441,56 +445,53 @@ compute_bic <- function(log_likelihood, k, n) {
   return(bic)
 }
 
-model1_k <- length(theta_model1)
-model2_k <- length(theta_model2)
-model3_k <- length(theta_model3)
-model4_k <- length(theta_model4)
-model5_k <- length(theta_model5)
-
 # Calculate AIC and BIC for each model
-model1_aic <- compute_aic(model1_log_likelihood, model1_k)
-model1_bic <- compute_bic(model1_log_likelihood, model1_k, n_samples)
+aic_bic_list_all_models <- lapply(names(model_definitions), function(model_name) {
+  # Get log-likelihood for the current model
+  log_likelihood <- loglik_var_list_all_models[[model_name]]$log_likelihood
+  
+  # Determine the number of parameters (k) for the current model
+  # Assuming theta_list_all_models contains the parameter vectors
+  k <- length(theta_list_all_models[[model_name]][!is.na(theta_list_all_models[[model_name]])])
+  
+  # Get the number of observations (n)
+  n <- length(target)  # Assuming 'target' is your target variable
+  
+  # Calculate AIC and BIC
+  aic <- compute_aic(log_likelihood, k)
+  bic <- compute_bic(log_likelihood, k, n)
+  
+  return(list(AIC = aic, BIC = bic))
+})
 
-model2_aic <- compute_aic(model2_log_likelihood, model2_k)
-model2_bic <- compute_bic(model2_log_likelihood, model2_k, n_samples)
+# Assign names to the results list
+names(aic_bic_list_all_models) <- names(model_definitions)
 
-model3_aic <- compute_aic(model3_log_likelihood, model3_k)
-model3_bic <- compute_bic(model3_log_likelihood, model3_k, n_samples)
-
-model4_aic <- compute_aic(model4_log_likelihood, model4_k)
-model4_bic <- compute_bic(model4_log_likelihood, model4_k, n_samples)
-
-model5_aic <- compute_aic(model5_log_likelihood, model5_k)
-model5_bic <- compute_bic(model5_log_likelihood, model5_k, n_samples)
-
-cat("Model 1:")
-cat("\nAIC:", model1_aic)
-cat("\nBIC:", model1_bic)
-
-cat("\n\nModel 2:")
-cat("\nAIC:", model2_aic)
-cat("\nBIC:", model2_bic)
-
-cat("\n\nModel 3:")
-cat("\nAIC:", model3_aic)
-cat("\nBIC:", model3_bic)
-
-cat("\n\nModel 4:")
-cat("\nAIC:", model4_aic)
-cat("\nBIC:", model4_bic)
-
-cat("\n\nModel 5:")
-cat("\nAIC:", model5_aic)
-cat("\nBIC:", model5_bic)
+# Print the AIC and BIC for each model
+for (model_name in names(aic_bic_list_all_models)) {
+  cat("Model ", gsub("Model", "", model_name), ":\n", sep = "")
+  cat("  AIC: ", aic_bic_list_all_models[[model_name]]$AIC, "\n", sep = "")
+  cat("  BIC: ", aic_bic_list_all_models[[model_name]]$BIC, "\n\n", sep = "")
+}
 ```
 
 
 ## Task 2.5: Distribution of Model Prediction Errors
 ```{r}
 # define function to compute model prediction errors (residuals)
-compute_model_prediction_error <- function(X, y, theta, model) {
+compute_model_prediction_error <- function(X, y, theta, model_func) {
   # generate predictions using the model
-  y_pred <- model(X, theta)
+  # Handle cases where X might be NULL or have zero rows or columns
+  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
+    y_pred <- rep(theta[1], length(y))  # Predict using only the intercept
+  } else {
+    X <- as.matrix(X)
+    # Ensure X has an intercept column; if not, add it
+    if (!("(Intercept)" %in% colnames(X))) {
+      X <- cbind("(Intercept)" = rep(1, nrow(X)), X)
+    }
+    y_pred <- X %*% theta
+  }
   
   # calculate prediction errors/residuals
   prediction_error <- y - y_pred
@@ -498,16 +499,97 @@ compute_model_prediction_error <- function(X, y, theta, model) {
   return(prediction_error)
 }
 
-# calculate prediction errors for each model
-prediction_error_model1 <- compute_model_prediction_error(X_model1, target, theta_model1, model1)
-prediction_error_model2 <- compute_model_prediction_error(X_model2, target, theta_model2, model2)
-prediction_error_model3 <- compute_model_prediction_error(X_model3, target, theta_model3, model3)
-prediction_error_model4 <- compute_model_prediction_error(X_model4, target, theta_model4, model4)
-prediction_error_model5 <- compute_model_prediction_error(X_model5, target, theta_model5, model5)
+# Define model functions (these should match your model definitions)
+# Ensure these functions handle cases with no predictors gracefully
+model1_func <- function(X, theta) {
+  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
+    return(rep(theta[1], nrow(target)))  # Intercept-only model
+  } else {
+    X <- as.matrix(X)
+    # Ensure X has an intercept column; if not, add it
+    if (!("(Intercept)" %in% colnames(X))) {
+      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
+    }
+    return(X %*% theta)
+  }
+}
+
+model2_func <- function(X, theta) {
+  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
+    return(rep(theta[1], nrow(target)))  # Intercept-only model
+  } else {
+    X <- as.matrix(X)
+    # Ensure X has an intercept column; if not, add it
+    if (!("(Intercept)" %in% colnames(X))) {
+      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
+    }
+    return(X %*% theta)
+  }
+}
+
+model3_func <- function(X, theta) {
+  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
+    return(rep(theta[1], nrow(target)))  # Intercept-only model
+  } else {
+    X <- as.matrix(X)
+    # Ensure X has an intercept column; if not, add it
+    if (!("(Intercept)" %in% colnames(X))) {
+      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
+    }
+    return(X %*% theta)
+  }
+}
+
+model4_func <- function(X, theta) {
+  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
+    return(rep(theta[1], nrow(target)))  # Intercept-only model
+  } else {
+    X <- as.matrix(X)
+    # Ensure X has an intercept column; if not, add it
+    if (!("(Intercept)" %in% colnames(X))) {
+      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
+    }
+    return(X %*% theta)
+  }
+}
+
+model5_func <- function(X, theta) {
+  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
+    return(rep(theta[1], nrow(target)))  # Intercept-only model
+  } else {
+    X <- as.matrix(X)
+    # Ensure X has an intercept column; if not, add it
+    if (!("(Intercept)" %in% colnames(X))) {
+      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
+    }
+    return(X %*% theta)
+  }
+}
+
+
+# Calculate prediction errors for each model
+prediction_error_model1_vec <- compute_model_prediction_error(
+  X_final_processed_list_all_models[["Model1"]], target, theta_list_all_models[["Model1"]], model1_func
+)
+
+prediction_error_model2_vec <- compute_model_prediction_error(
+  X_final_processed_list_all_models[["Model2"]], target, theta_list_all_models[["Model2"]], model2_func
+)
+
+prediction_error_model3_vec <- compute_model_prediction_error(
+  X_final_processed_list_all_models[["Model3"]], target, theta_list_all_models[["Model3"]], model3_func
+)
+
+prediction_error_model4_vec <- compute_model_prediction_error(
+  X_final_processed_list_all_models[["Model4"]], target, theta_list_all_models[["Model4"]], model4_func
+)
+
+prediction_error_model5_vec <- compute_model_prediction_error(
+  X_final_processed_list_all_models[["Model5"]], target, theta_list_all_models[["Model5"]], model5_func
+)
+
 
 # create enhanced QQ plots to check for normality of residuals
-par(mfrow = c(2, 3), mar = c(4, 4, 3, 1))
-
 # function to create enhanced QQ plot
 create_enhanced_qq <- function(residuals, model_name) {
   # generate QQ plot
@@ -518,29 +600,23 @@ create_enhanced_qq <- function(residuals, model_name) {
 }
 
 # create QQ plots for all models
-create_enhanced_qq(prediction_error_model1, "Model 1")
-create_enhanced_qq(prediction_error_model2, "Model 2")
-create_enhanced_qq(prediction_error_model3, "Model 3")
-create_enhanced_qq(prediction_error_model4, "Model 4")
-create_enhanced_qq(prediction_error_model5, "Model 5")
-
-# reset plot layout
-par(mfrow = c(1, 1))
+create_enhanced_qq(prediction_error_model1_vec, "Model 1")
+create_enhanced_qq(prediction_error_model2_vec, "Model 2")
+create_enhanced_qq(prediction_error_model3_vec, "Model 3")
+create_enhanced_qq(prediction_error_model4_vec, "Model 4")
+create_enhanced_qq(prediction_error_model5_vec, "Model 5")
 ```
 
 ```{r}
 # compile all model evaluation metrics into a comprehensive table
 model_comparison <- data.frame(
-  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
-  Parameters = c(model1_k, model2_k, model3_k, model4_k, model5_k),
-  RSS = c(rss_model1, rss_model2, rss_model3, rss_model4, rss_model5),
-  LogLikelihood = c(model1_log_likelihood, model2_log_likelihood, 
-                   model3_log_likelihood, model4_log_likelihood, 
-                   model5_log_likelihood),
-  AIC = c(model1_aic, model2_aic, model3_aic, model4_aic, model5_aic),
-  BIC = c(model1_bic, model2_bic, model3_bic, model4_bic, model5_bic),
-  Variance = c(model1_variance, model2_variance, model3_variance, 
-              model4_variance, model5_variance)
+  Model = names(model_definitions),
+  Parameters = sapply(theta_list_all_models, function(theta) length(theta[!is.na(theta)])),
+  RSS = sapply(rss_values, function(rss) ifelse(is.null(rss) || length(rss) == 0 || is.na(rss), NA, rss)),
+  LogLikelihood = sapply(loglik_var_list_all_models, function(item) ifelse(is.null(item) || is.na(item$log_likelihood), NA, item$log_likelihood)),
+  AIC = sapply(aic_bic_list_all_models, function(item) ifelse(is.null(item) || is.na(item$AIC), NA, item$AIC)),
+  BIC = sapply(aic_bic_list_all_models, function(item) ifelse(is.null(item) || is.na(item$BIC), NA, item$BIC)),
+  Variance = sapply(loglik_var_list_all_models, function(item) ifelse(is.null(item) || is.na(item$variance), NA, item$variance))
 )
 
 # display the comprehensive table
@@ -549,10 +625,10 @@ kable(model_comparison,
       digits = c(0, 0, 2, 2, 2, 2, 4))
 
 # rank models based on different criteria
-rank_rss <- rank(model_comparison$RSS)
-rank_aic <- rank(model_comparison$AIC)
-rank_bic <- rank(model_comparison$BIC)
-rank_loglik <- rank(-model_comparison$LogLikelihood)  # Negative because higher is better
+rank_rss <- rank(model_comparison$RSS, na.last = "keep")
+rank_aic <- rank(model_comparison$AIC, na.last = "keep")
+rank_bic <- rank(model_comparison$BIC, na.last = "keep")
+rank_loglik <- rank(-model_comparison$LogLikelihood, na.last = "keep")  # Negative because higher is better
 
 ranking_table <- data.frame(
   Model = model_comparison$Model,
@@ -571,13 +647,23 @@ kable(ranking_table,
       caption = "Model Ranking Based on Different Criteria (Lower is Better)")
 
 # determine the best model based on our criteria
-best_model_index <- which.min(model_comparison$AIC)
-best_model_name <- model_comparison$Model[best_model_index]
+best_model_aic_index <- which.min(model_comparison$AIC)
+best_model_aic_name <- model_comparison$Model[best_model_aic_index]
 
-cat(paste("Based on AIC, the best model is:", best_model_name, "\n"))
-cat(paste("Based on BIC, the best model is:", model_comparison$Model[which.min(model_comparison$BIC)], "\n"))
-cat(paste("Based on Log-Likelihood, the best model is:", model_comparison$Model[which.max(model_comparison$LogLikelihood)], "\n"))
-cat(paste("Based on RSS, the best model is:", model_comparison$Model[which.min(model_comparison$RSS)], "\n"))
+best_model_bic_index <- which.min(model_comparison$BIC)
+best_model_bic_name <- model_comparison$Model[best_model_bic_index]
+
+best_model_loglik_index <- which.max(model_comparison$LogLikelihood)
+best_model_loglik_name <- model_comparison$Model[best_model_loglik_index]
+
+best_model_rss_index <- which.min(model_comparison$RSS)
+best_model_rss_name <- model_comparison$Model[best_model_rss_index]
+
+
+cat(paste("Based on AIC, the best model is:", best_model_aic_name, "\n"))
+cat(paste("Based on BIC, the best model is:", best_model_bic_name, "\n"))
+cat(paste("Based on Log-Likelihood, the best model is:", best_model_loglik_name, "\n"))
+cat(paste("Based on RSS, the best model is:", best_model_rss_name, "\n"))
 ```
 
 ## Train-Test Split
@@ -824,7 +910,6 @@ ggplot(accepted_df, aes(x = Param1, y = Param2)) +
   )
 
 # marginal posterior distributions
-par(mfrow = c(1, 2))
 
 # first parameter
 hist(abc_results$samples[, 1], breaks = 20, 
@@ -840,8 +925,6 @@ hist(abc_results$samples[, 2], breaks = 20,
      col = "lightgreen", border = "white")
 abline(v = train_theta[top_param_indices[2]], col = "red", lwd = 2, lty = 2)
 
-# reset plot layout
-par(mfrow = c(1, 1))
 ```
 
 ## Joint and Marginal Posterior Distribution
@@ -854,7 +937,6 @@ cat("95% Credible interval for Parameter", top_param_indices[1], ":", ci_param1,
 cat("95% Credible interval for Parameter", top_param_indices[2], ":", ci_param2, "\n")
 
 # create density plots with credible intervals
-par(mfrow = c(1, 2))
 
 # first parameter density
 plot(density(abc_results$samples[, 1]), 
@@ -882,7 +964,6 @@ legend("topright",
        lty = c(1, 2, 3), 
        lwd = c(2, 2, 1))
 
-# reset plot layout
-par(mfrow = c(1, 1))
+
 ```
 
