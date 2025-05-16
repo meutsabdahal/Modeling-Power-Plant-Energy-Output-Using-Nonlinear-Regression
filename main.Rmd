@@ -9,6 +9,7 @@ install.packages("MASS")
 install.packages("gridExtra")
 install.packages("dplyr")
 install.packages("knitr")
+
 ```
 
 # Loading Libraries
@@ -69,36 +70,130 @@ print(summary_stats)
 ## Time Series Analysis
 ### Time Series Analysis (Input Signal)
 ```{r}
-# convert features into time series objects
+# Function to plot time series with optional rolling average, and sampling at regular intervals
+plot_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab, 
+                                     col = "black", 
+                                     rolling_avg = FALSE, rolling_window = 100, 
+                                     sample_interval = NULL) {
+  
+  time_series_to_plot <- time_series
+  time_indices_to_plot <- seq_along(time_series)
+  rolling_mean_to_plot <- NULL
+  
+  # 1. Rolling Average Calculation
+  if (rolling_avg) {
+    rolling_mean <- stats::filter(time_series, rep(1/rolling_window, rolling_window), sides = 2)
+    
+    # Trim NA values
+    valid_indices <- rolling_window: (length(time_series) - rolling_window + 1)
+    rolling_mean <- rolling_mean[valid_indices]
+    time_series_to_plot <- time_series_to_plot[valid_indices]
+    time_indices_to_plot <- time_indices_to_plot[valid_indices]
+    rolling_mean_to_plot <- rolling_mean
+  }
+  
+  # 2. Sampling at Intervals
+  if (!is.null(sample_interval)) {
+    sampled_indices <- seq(1, length(time_series_to_plot), by = sample_interval)
+    time_series_to_plot <- time_series_to_plot[sampled_indices]
+    time_indices_to_plot <- time_indices_to_plot[sampled_indices]
+    if (rolling_avg) {
+      rolling_mean_to_plot <- rolling_mean_to_plot[sampled_indices]
+    }
+  }
+  
+  # 3. Plotting
+  plot(time_indices_to_plot, time_series_to_plot,
+       type = "l",
+       main = var_name,
+       xlab = xlab,
+       ylab = ylab,
+       col = col,
+       cex.lab = 1.2,
+       cex.main = 1.4
+  )
+  
+  # 4. Add Rolling Average Line (if requested)
+  if (rolling_avg) {
+    lines(time_indices_to_plot, rolling_mean_to_plot, col = "red", lwd = 2)
+    legend("topright", legend = c("Original (or Sampled)", paste(rolling_window, "-Point Avg")),
+           col = c(col, "red"), lty = 1, lwd = c(1, 2), cex = 0.8)
+  }
+}
+
+# Convert features to time series objects
 features.ts <- ts(features, start = c(min(time), max(time)), frequency = 1)
 
-# create individual time series plots for each input signal
-
-# plot for temperature (x1)
-plot(features.ts[,"x1"], main = "Time Series - Temperature",
-     xlab = "Time", ylab = "Temperature (°C)", col = "darkred")
-
-# plot for ambient pressure (x3)
-plot(features.ts[,"x3"], main = "Time Series - Ambient Pressure",
-     xlab = "Time", ylab = "Pressure (millibar)", col = "darkblue")
-
-# plot for relative humidity (x4)
-plot(features.ts[,"x4"], main = "Time Series - Relative Humidity",
-     xlab = "Time", ylab = "Humidity (%)", col = "darkgreen")
-
-# plot for exhaust vacuum (x5)
-plot(features.ts[,"x5"], main = "Time Series - Exhaust Vacuum",
-     xlab = "Time", ylab = "Vacuum (cm Hg)", col = "darkorange")
+# Plotting with the new sampling interval
+plot_time_series_enhanced(features.ts[, "x1"], "Temperature", ylab = "Temperature (°C)", col = "darkred", rolling_avg = TRUE, rolling_window = 100, sample_interval = 90)
+plot_time_series_enhanced(features.ts[, "x3"], "Ambient Pressure", ylab = "Pressure (millibar)", col = "darkblue", rolling_avg = TRUE, rolling_window = 100, sample_interval = 90)
+plot_time_series_enhanced(features.ts[, "x4"], "Relative Humidity", ylab = "Humidity (%)", col = "darkgreen", rolling_avg = TRUE, rolling_window = 100, sample_interval = 90)
+plot_time_series_enhanced(features.ts[, "x5"], "Exhaust Vacuum", ylab = "Vacuum (cm Hg)", col = "darkorange", rolling_avg = TRUE, rolling_window = 100, sample_interval = 90)
 ```
 
 ### Time Series Analysis (Input Signal)
 ```{r}
-# convert target to time series object
+# Function to plot target time series with optional rolling average, and sampling at regular intervals
+plot_target_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab,
+                                            col = "purple", lwd = 1.5,
+                                            rolling_avg = FALSE, rolling_window = 100,
+                                            sample_interval = NULL) {
+
+  time_series_to_plot <- time_series
+  time_indices_to_plot <- seq_along(time_series)
+  rolling_mean_to_plot <- NULL
+
+  # 1. Rolling Average Calculation
+  if (rolling_avg) {
+    rolling_mean <- stats::filter(time_series, rep(1/rolling_window, rolling_window), sides = 2)
+
+    # Trim NA values
+    valid_indices <- rolling_window: (length(time_series) - rolling_window + 1)
+    rolling_mean <- rolling_mean[valid_indices]
+    time_series_to_plot <- time_series_to_plot[valid_indices]
+    time_indices_to_plot <- time_indices_to_plot[valid_indices]
+    rolling_mean_to_plot <- rolling_mean
+  }
+
+  # 2. Sampling at Intervals
+  if (!is.null(sample_interval)) {
+    sampled_indices <- seq(1, length(time_series_to_plot), by = sample_interval)
+    time_series_to_plot <- time_series_to_plot[sampled_indices]
+    time_indices_to_plot <- time_indices_to_plot[sampled_indices]
+    if (rolling_avg) {
+      rolling_mean_to_plot <- rolling_mean_to_plot[sampled_indices]
+    }
+  }
+
+  # 3. Plotting
+  plot(time_indices_to_plot, time_series_to_plot,
+       type = "l",
+       main = var_name,
+       xlab = xlab,
+       ylab = ylab,
+       col = col,
+       lwd = lwd,
+       cex.lab = 1.2,
+       cex.main = 1.4
+  )
+
+  # 4. Add Rolling Average Line (if requested)
+  if (rolling_avg) {
+    lines(time_indices_to_plot, rolling_mean_to_plot, col = "red", lwd = 2)
+    legend("topright", legend = c("Original (or Sampled)", paste(rolling_window, "-Point Avg")),
+           col = c(col, "red"), lty = 1, lwd = c(1, 2), cex = 0.8)
+  }
+}
+
+# Convert target to time series object
 target.ts <- ts(target, start = c(min(time), max(time)), frequency = 1)
 
-# plot output signal time series
-plot(target.ts, main = "Time Series - Net Hourly Electrical Energy Output",
-     xlab = "Time", ylab = "Energy Output (MW)", col = "purple", lwd = 1.5)
+# Plotting the target time series with options
+plot_target_time_series_enhanced(target.ts, "Net Hourly Electrical Energy Output",
+                                 xlab = "Time", ylab = "Energy Output (MW)",
+                                 col = "purple", lwd = 1.5,
+                                 rolling_avg = TRUE, rolling_window = 100,
+                                 sample_interval = 90)
 ```
 
 ## Distribution of Each Signal (Output Signal)
@@ -207,11 +302,10 @@ plots <- list(
   x5 = c("Exhaust Vacuum (cm Hg)",  "Net Energy Output (MW)")
 )
 
-# Set up 2 rows × 3 columns
-par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
+# Reset to single plot (ensure only one plot is drawn at a time)
+par(mfrow = c(1, 1), mar = c(4, 4, 2, 1))
 
 # Loop over each feature → plot(feature, target) with its own color
-i <- 1
 for (name in names(plots)) {
   labs <- plots[[name]]
   x    <- features[, name]
@@ -221,19 +315,12 @@ for (name in names(plots)) {
     x, y,
     xlab  = labs[1],
     ylab  = labs[2],
-    main  = paste(name, "vs X2"),
+    main  = paste("Scatter Plot:", labs[1], "vs", labs[2]),
     pch   = 16,
     cex   = 0.6,
-    col   = plot_colors[i]
+    col   = plot_colors[which(names(plots) == name)]  # Correct color selection
   )
-  i <- i + 1
 }
-
-# Leave the last panel empty
-plot.new()
-
-# Reset to single plot
-par(mfrow = c(1, 1))
 
 ```
 
@@ -292,13 +379,12 @@ X_final_processed_list_all_models <- list()     # To store the design matrix (X 
 # model 4: uses relative humidity, squared ambient pressure, and cubed exhaust vacuum
 # model 5: uses relative humidity, squared temperature, and squared ambient pressure
 model_definitions <- list(
-  Model1 = data.frame(x4 = X$x4, x3 = X$x3^2),
-  Model2 = data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5),
-  Model3 = data.frame(x3 = X$x3, x4 = X$x4, x5 = X$x5^3),
-  Model4 = data.frame(x4 = X$x4, x3 = X$x3^2, x5 = X$x5^3),
-  Model5 = data.frame(x4 = X$x4, x1 = X$x1^2, x3 = X$x3^2)
+  Model1 = data.frame(x4 = features[,"x4"], x3 = features[,"x3"]^2),
+  Model2 = data.frame(x4 = features[,"x4"], x3 = features[,"x3"]^2, x5 = features[,"x5"]),
+  Model3 = data.frame(x3 = features[,"x3"], x4 = features[,"x4"], x5 = features[,"x5"]^3),
+  Model4 = data.frame(x4 = features[,"x4"], x3 = features[,"x3"]^2, x5 = features[,"x5"]^3),
+  Model5 = data.frame(x4 = features[,"x4"], x1 = features[,"x1"]^2, x3 = features[,"x3"]^2)
 )
-
 # Loop through each model definition
 for (model_label in names(model_definitions)) {
   cat("\nTheta for", model_label, "\n")
@@ -566,7 +652,6 @@ model5_func <- function(X, theta) {
   }
 }
 
-
 # Calculate prediction errors for each model
 prediction_error_model1_vec <- compute_model_prediction_error(
   X_final_processed_list_all_models[["Model1"]], target, theta_list_all_models[["Model1"]], model1_func
@@ -689,8 +774,13 @@ test_X <- data.frame(x4 = test_features[,"x4"],
                     x1_squared = test_features[,"x1"]^2, 
                     x3_squared = test_features[,"x3"]^2)
 
+# Scale the training data (excluding intercept if it exists)
+train_X_scaled <- scale(train_X)
+train_X_scaled_no_intercept <- train_X_scaled[, !(colnames(train_X_scaled) %in% "(Intercept)")]
+
 # estimate parameters using training data
-train_theta <- theta_ridge(train_X, train_target)
+train_theta <- estimate_theta_ols_scaled(train_X_scaled_no_intercept, train_target, lambda_ols_param)
+
 cat("Model 5 parameters estimated on training data:\n")
 print(train_theta)
 
