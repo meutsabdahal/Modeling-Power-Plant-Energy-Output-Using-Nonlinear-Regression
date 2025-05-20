@@ -9,7 +9,8 @@ install.packages("MASS")
 install.packages("gridExtra")
 install.packages("dplyr")
 install.packages("knitr")
-
+install.packages("matrixStats")
+install.packages("ggdensity")
 ```
 
 # Loading Libraries
@@ -23,6 +24,9 @@ library(MASS)       # for statistical functions
 library(gridExtra)  # for arranging plots
 library(dplyr)      # for data manipulation
 library(knitr)      # for tables
+library(doParallel) # For parallel processing
+library(foreach)    # For parallel processing (used with doParallel)
+library(ggdensity) # Optional: For enhanced 2D density plots/contours
 ```
 
 # Loading Datasets
@@ -131,7 +135,7 @@ plot_time_series_enhanced(features.ts[, "x4"], "Relative Humidity", ylab = "Humi
 plot_time_series_enhanced(features.ts[, "x5"], "Exhaust Vacuum", ylab = "Vacuum (cm Hg)", col = "darkorange", rolling_avg = TRUE, rolling_window = 100, sample_interval = 90)
 ```
 
-### Time Series Analysis (Input Signal)
+### Time Series Analysis (Output Signal)
 ```{r}
 # Function to plot target time series with optional rolling average, and sampling at regular intervals
 plot_target_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab,
@@ -196,75 +200,61 @@ plot_target_time_series_enhanced(target.ts, "Net Hourly Electrical Energy Output
                                  sample_interval = 90)
 ```
 
-## Distribution of Each Signal (Output Signal)
+## Distribution of Each Signal
 ```{r}
 # function to create enhanced histogram with density plot and normal reference
-plot_enhanced_histogram <- function(data, column, title, xlab) {
-  # calculate density
-  dens <- density(data)
-  
+plot_enhanced_histogram <- function(data, title, xlab, col = "lightblue", density_col = "darkblue") {
   # create histogram
-  hist(data, freq = FALSE, main = title, xlab = xlab, col = "lightblue",
-    border = "white", ylim = c(0, max(dens$y) * 1.1))
-  
+  hist(data, freq = FALSE, main = title, xlab = xlab, col = col,
+       border = "white")
+
   # add density line
-  lines(dens, lwd = 2, col = "darkblue")
-  
-  # add normal distribution reference
-  curve(dnorm(x, mean = mean(data), sd = sd(data)), add = TRUE,
-    col = "red", lty = 2, lwd = 1.5)
-  
-  # add legend
-  legend("topleft", legend = c("Density", "Normal Reference"),
-    col = c("darkblue", "red"), lty = c(1, 2), lwd = c(2, 1.5))
-  
-  # add mean line
-  abline(v = mean(data), col = "darkgreen", lwd = 1.5, lty = 2)
-  
-  # add text for mean and standard deviation
-  usr <- par("usr")  # c(x1, x2, y1, y2)
-  text(x = usr[2] - 0.02 * diff(usr[1:2]), y = usr[4] - 0.05 * diff(usr[3:4]),  
-    labels = sprintf("Mean: %.2f\nSD:   %.2f", mean(data), sd(data)), adj = c(1, 1))
+  lines(density(data), lwd = 2, col = density_col)
 }
 
 # histogram for temperature (x1)
 plot_enhanced_histogram(
-  features[,"x1"], 
-  "x1", 
-  "Distribution of Temperature (x1)", 
-  "Ambient temperature (°C)"
+  features[, "x1"],
+  "Distribution of Temperature (x1)",
+  "Ambient temperature (°C)",
+  col = "lightpink",
+  density_col = "deeppink"
 )
 
 # histogram for ambient pressure (x3)
 plot_enhanced_histogram(
-  features[,"x3"], 
-  "x3", 
-  "Distribution of Ambient Pressure (x3)", 
-  "Atmospheric pressure (millibar)"
+  features[, "x3"],
+  "Distribution of Ambient Pressure (x3)",
+  "Atmospheric pressure (millibar)",
+  col = "lightcyan",
+  density_col = "darkcyan"
 )
 
 # histogram for relative humidity (x4)
 plot_enhanced_histogram(
-  features[,"x4"], 
-  "x4", 
-  "Distribution of Relative Humidity (x4)", 
-  "Humidity level (%)"
+  features[, "x4"],
+  "Distribution of Relative Humidity (x4)",
+  "Humidity level (%)",
+  col = "lemonchiffon",
+  density_col = "gold"
 )
 
 # histogram for exhaust vacuum (x5)
 plot_enhanced_histogram(
-  features[,"x5"], 
-  "x5", 
-  "Distribution of Exhaust Vacuum (x5)", 
-  "Vacuum (cm Hg)"
+  features[, "x5"],
+  "Distribution of Exhaust Vacuum (x5)",
+  "Vacuum (cm Hg)",
+  col = "lavender",
+  density_col = "mediumpurple"
 )
 
 # histogram for net hourly electrical energy output (X2)
 plot_enhanced_histogram(
-  target[,"X2"], 
-  "X2", 
-  "Distribution of Net Hourly Electrical Energy Output (X2)", 
-  "Net hourly electrical energy output (MW)"
+  target[, "X2"],
+  "Distribution of Net Hourly Electrical Energy Output (X2)",
+  "Net hourly electrical energy output (MW)",
+  col = "honeydew",
+  density_col = "forestgreen"
 )
 
 ```
@@ -315,7 +305,7 @@ for (name in names(plots)) {
     x, y,
     xlab  = labs[1],
     ylab  = labs[2],
-    main  = paste("Scatter Plot:", labs[1], "vs", labs[2]),
+    main  = paste(labs[1], "vs", labs[2]),
     pch   = 16,
     cex   = 0.6,
     col   = plot_colors[which(names(plots) == name)]  # Correct color selection
@@ -325,413 +315,371 @@ for (name in names(plots)) {
 ```
 
 # Task 2: Regression Modeling
-## Task 2.1: Parameter Estimation Using Ridge Regression
-
+## Task 2.1: Model Parameters
 ```{r}
-lambda_ols_param <- 0     # Setting lambda to 0 for Ordinary Least Squares (no regularization)
-
-# Function to estimate theta using OLS with scaled predictors
-estimate_theta_ols_scaled <- function(X_scaled_no_intercept, y_response_vec, lambda_val) {
-  # Handle intercept-only model (if X_scaled_no_intercept has columns but no rows, or no columns)
-  if (ncol(X_scaled_no_intercept) == 0 && nrow(X_scaled_no_intercept) > 0) {
-    X_final_mat <- matrix(1, nrow = nrow(X_scaled_no_intercept), ncol = 1)     # Design matrix for intercept-only
-    colnames(X_final_mat) <- c("(Intercept)")
-  } else if (nrow(X_scaled_no_intercept) > 0) {     # Model with predictors
-    X_final_mat <- cbind("(Intercept)" = rep(1, nrow(X_scaled_no_intercept)), X_scaled_no_intercept)     # Add intercept column
-  } else {     # No data
-    warning("Input X_scaled_no_intercept has 0 rows.")
-    return(NA)     # Return NA if no data
+# OLS helper
+fit_ls <- function(X, y) {
+  # Add checks for singular matrix for robust error handling, though ginv helps.
+  if (det(t(X) %*% X) == 0) {
+    warning("Matrix (X'X) is singular. OLS coefficients might not be unique.")
   }
-
-  # Check if there are enough data points for the number of parameters
-  if (nrow(X_final_mat) < ncol(X_final_mat)) {
-    warning(paste0("Skipping OLS - not enough rows (", nrow(X_final_mat),
-                  ") for predictors (", ncol(X_final_mat), ")."))
-    return(NA)     # Return NA if not enough data
-  }
-
-  # Calculate theta_hat using the OLS formula with potential regularization (lambda_val)
-  theta_hat <- tryCatch({
-    XtX <- t(X_final_mat) %*% X_final_mat     # X transpose X
-    penalty_matrix <- lambda_val * diag(ncol(X_final_mat))     # Penalty matrix for Ridge regression (0 if lambda_val=0)
-    if (ncol(X_final_mat) > 0) penalty_matrix[1,1] <- 0     # Intercept is typically not penalized
-    XtX_reg <- XtX + penalty_matrix     # Regularized XtX (or just XtX if lambda_val is 0)
-    
-    # Use Moore-Penrose generalized inverse (ginv) for numerical stability
-    estimated_coeffs <- MASS::ginv(XtX_reg) %*% t(X_final_mat) %*% y_response_vec
-    rownames(estimated_coeffs) <- colnames(X_final_mat)     # Assign names to coefficients
-    return(estimated_coeffs)
-  }, error = function(e) {
-    message(paste0("Error calculating theta_hat with OLS: ", e$message))
-    return(NA)     # Return NA on error
-  })
-  return(theta_hat)
+  ginv(t(X) %*% X) %*% t(X) %*% y
 }
 
-# Initialize lists to store results for all models
-theta_list_all_models <- list()     # To store estimated parameters (theta_hat)
-X_final_processed_list_all_models <- list()     # To store the design matrix (X with intercept and scaled predictors)
-
-# Define model definitions  
-# model 1: uses relative humidity and squared ambient pressure
-# model 2: extends Model 1 by adding exhaust vacuum
-# model 3: uses ambient pressure, relative humidity, and cubed exhaust vacuum
-# model 4: uses relative humidity, squared ambient pressure, and cubed exhaust vacuum
-# model 5: uses relative humidity, squared temperature, and squared ambient pressure
-model_definitions <- list(
-  Model1 = data.frame(x4 = features[,"x4"], x3 = features[,"x3"]^2),
-  Model2 = data.frame(x4 = features[,"x4"], x3 = features[,"x3"]^2, x5 = features[,"x5"]),
-  Model3 = data.frame(x3 = features[,"x3"], x4 = features[,"x4"], x5 = features[,"x5"]^3),
-  Model4 = data.frame(x4 = features[,"x4"], x3 = features[,"x3"]^2, x5 = features[,"x5"]^3),
-  Model5 = data.frame(x4 = features[,"x4"], x1 = features[,"x1"]^2, x3 = features[,"x3"]^2)
-)
-# Loop through each model definition
-for (model_label in names(model_definitions)) {
-  cat("\nTheta for", model_label, "\n")
-  X_raw_current_df <- model_definitions[[model_label]]     # Get raw predictors for the current model
-
-  # Skip if model data is null or empty
-  if (is.null(X_raw_current_df) || nrow(X_raw_current_df) == 0) {
-    theta_list_all_models[[model_label]] <- NA
-    X_final_processed_list_all_models[[model_label]] <- NA
-    next
+# function scales columns  and handles cases where
+# a column might be constant
+scale_features_matrix <- function(mat) {
+  if (is.null(mat) || ncol(mat) == 0) {
+    return(matrix(nrow = nrow(mat), ncol = 0)) # Return empty matrix if input is empty
   }
-  
-  X_raw_current_mat <- as.matrix(X_raw_current_df)     # Convert to matrix
-  X_scaled_current_no_int <- matrix(nrow = nrow(X_raw_current_mat), ncol = 0)     # Initialize scaled matrix (no intercept yet)
+  scaled_mat <- scale(mat)
+  #
+  scaled_mat[is.na(scaled_mat)] <- 0
+  return(scaled_mat)
+}
 
-  # Scale predictors if there are any
-  if (ncol(X_raw_current_mat) > 0) {
-    original_colnames <- colnames(X_raw_current_mat)     # Store original column names
-    # Assign default column names if missing
-    if (is.null(original_colnames)) {
-        original_colnames <- if(ncol(X_raw_current_mat) == 1 && !is.null(names(X_raw_current_df))) names(X_raw_current_df) else paste0("V", 1:ncol(X_raw_current_mat))
-    }
-    X_scaled_temp_mat <- scale(X_raw_current_mat)     # Scale the predictors (center and scale)
-    X_scaled_temp_mat[is.na(X_scaled_temp_mat)] <- 0     # Replace any NA/NaN from scaling (e.g., constant column) with 0
-    X_scaled_current_no_int <- X_scaled_temp_mat
-    colnames(X_scaled_current_no_int) <- original_colnames     # Restore column names
-  }
+# Build each model and fit 
+theta_estimates <- list()
 
-  # Estimate theta_hat for the current model using scaled predictors
-  current_theta_hat_val <- estimate_theta_ols_scaled(X_scaled_current_no_int, target, lambda_val = lambda_ols_param)
-  theta_list_all_models[[model_label]] <- current_theta_hat_val     # Store estimated theta
+# Model 1: y = θ1·x4 + θ2·x3² + θbias
+# 1. Create raw feature matrix for this model
+X1_raw_features <- cbind(x4 = features[,"x4"],
+                         x3_squared = features[,"x3"]^2)
+# 2. Scale these raw features
+X1_scaled_features <- scale_features_matrix(X1_raw_features)
+# 3. Add the intercept column to the scaled features
+X1 <- cbind("(Intercept)" = 1, X1_scaled_features)
+# 4. Fit the OLS model
+theta_estimates[["Model1"]] <- fit_ls(X1, target)
+rownames(theta_estimates[["Model1"]]) <- colnames(X1)
 
-  # Store the final processed design matrix (with intercept and scaled predictors)
-  if (!is.null(current_theta_hat_val) && !all(is.na(current_theta_hat_val))) {
-      X_final_processed_list_all_models[[model_label]] <- if (ncol(X_scaled_current_no_int) == 0 && nrow(X_scaled_current_no_int) > 0) {
-          # Design matrix for intercept-only model
-          matrix(1, nrow = nrow(X_scaled_current_no_int), ncol = 1, dimnames = list(NULL, "(Intercept)"))
-      } else if (nrow(X_scaled_current_no_int) > 0) {
-          # Design matrix with intercept and scaled predictors
-          cbind("(Intercept)" = rep(1, nrow(X_scaled_current_no_int)), X_scaled_current_no_int)
-      } else { NA }
-  } else {
-      X_final_processed_list_all_models[[model_label]] <- NA     # Store NA if theta estimation failed
-  }
-  print(current_theta_hat_val)
+
+# Model 2: y = θ1·x4 + θ2·x3² + θ3·x5 + θbias
+X2_raw_features <- cbind(x4 = features[,"x4"],
+                         x3_squared = features[,"x3"]^2,
+                         x5 = features[,"x5"])
+X2_scaled_features <- scale_features_matrix(X2_raw_features)
+X2 <- cbind("(Intercept)" = 1, X2_scaled_features)
+theta_estimates[["Model2"]] <- fit_ls(X2, target)
+rownames(theta_estimates[["Model2"]]) <- colnames(X2)
+
+
+# Model 3: y = θ1·x3 + θ2·x4 + θ3·x5³ + θbias
+X3_raw_features <- cbind(x3 = features[,"x3"],
+                         x4 = features[,"x4"],
+                         x5_cubed = features[,"x5"]^3)
+X3_scaled_features <- scale_features_matrix(X3_raw_features)
+X3 <- cbind("(Intercept)" = 1, X3_scaled_features)
+theta_estimates[["Model3"]] <- fit_ls(X3, target)
+rownames(theta_estimates[["Model3"]]) <- colnames(X3)
+
+
+# Model 4: y = θ1·x4 + θ2·x3² + θ3·x5³ + θbias
+X4_raw_features <- cbind(x4 = features[,"x4"],
+                         x3_squared = features[,"x3"]^2,
+                         x5_cubed = features[,"x5"]^3)
+X4_scaled_features <- scale_features_matrix(X4_raw_features)
+X4 <- cbind("(Intercept)" = 1, X4_scaled_features)
+theta_estimates[["Model4"]] <- fit_ls(X4, target)
+rownames(theta_estimates[["Model4"]]) <- colnames(X4)
+
+
+# Model 5: y = θ1·x4 + θ2·x1² + θ3·x3² + θbias
+X5_raw_features <- cbind(x4 = features[,"x4"],
+                         x1_squared = features[,"x1"]^2,
+                         x3_squared = features[,"x3"]^2)
+X5_scaled_features <- scale_features_matrix(X5_raw_features)
+X5 <- cbind("(Intercept)" = 1, X5_scaled_features)
+theta_estimates[["Model5"]] <- fit_ls(X5, target)
+rownames(theta_estimates[["Model5"]]) <- colnames(X5)
+
+
+# Print results 
+for (model in names(theta_estimates)) {
+  cat("\n", model, "θ̂ =\n")
+  print(theta_estimates[[model]])
 }
 ```
 
 ## Task 2.2: Model Residual Sum of Squared Error (RSS)
 ```{r}
-# Function to compute RSS using design matrix and parameters
+# RSS Calculation
 compute_rss_matrix <- function(X, y, theta) {
-  # Predict y values using Xθ̂
   y_pred <- tryCatch(X %*% theta, error = function(e) NULL)
-  if (is.null(y_pred)) return(NA)   # Return NA if prediction fails
-  
-  # Compute RSS
-  sum((y - y_pred)^2, na.rm = TRUE) # Sum of squared differences, remove NA if any
+  if (is.null(y_pred) || any(is.na(y_pred))) {
+      return(NA)
+  }
+  sum((y - y_pred)^2)
 }
 
-# Prepare design matrices for RSS calculation (including intercept)
-# Use the X_final_processed_list_all_models directly!
-rss_values <- lapply(names(model_definitions), function(model_name) {
-  X_matrix <- X_final_processed_list_all_models[[model_name]]
-  theta <- theta_list_all_models[[model_name]]
-  
-  # Check for NA or NULL and dimension compatibility
-  if (is.null(X_matrix) || any(is.na(X_matrix)) || is.null(theta) || any(is.na(theta)) || ncol(X_matrix) != length(theta)) {
-    return(NA)   # Return NA if there are issues
-  }
-  
-  compute_rss_matrix(X_matrix, target, theta)
-})
-names(rss_values) <- names(model_definitions)
+rss_estimates <- list()
 
-# Print the RSS values in the desired format
-for (model_name in names(rss_values)) {
-  cat(model_name, "RSS: ", rss_values[[model_name]], "\n")
+# Model 1: y = θ1·x4 + θ2·x3² + θbias
+theta_1 <- theta_estimates[["Model1"]] # Get theta from Task 2.1's output
+if (!all(is.na(theta_1))) {
+  rss_estimates[["Model1"]] <- compute_rss_matrix(X1, target, theta_1)
+} else {
+  rss_estimates[["Model1"]] <- NA
+}
+
+
+# Model 2: y = θ1·x4 + θ2·x3² + θ3·x5 + θbias
+theta_2 <- theta_estimates[["Model2"]]
+if (!all(is.na(theta_2))) {
+  rss_estimates[["Model2"]] <- compute_rss_matrix(X2, target, theta_2)
+} else {
+  rss_estimates[["Model2"]] <- NA
+}
+
+
+# Model 3: y = θ1·x3 + θ2·x4 + θ3·x5³ + θbias
+theta_3 <- theta_estimates[["Model3"]]
+if (!all(is.na(theta_3))) {
+  rss_estimates[["Model3"]] <- compute_rss_matrix(X3, target, theta_3)
+} else {
+  rss_estimates[["Model3"]] <- NA
+}
+
+
+# Model 4: y = θ1·x4 + θ2·x3² + θ3·x5³ + θbias
+theta_4 <- theta_estimates[["Model4"]]
+if (!all(is.na(theta_4))) {
+  rss_estimates[["Model4"]] <- compute_rss_matrix(X4, target, theta_4)
+} else {
+  rss_estimates[["Model4"]] <- NA
+}
+
+
+# Model 5: y = θ1·x4 + θ2·x1² + θ3·x3² + θbias
+theta_5 <- theta_estimates[["Model5"]]
+if (!all(is.na(theta_5))) {
+  rss_estimates[["Model5"]] <- compute_rss_matrix(X5, target, theta_5)
+} else {
+  rss_estimates[["Model5"]] <- NA
+}
+
+
+cat("\n--- Task 2.2: Residual Sum of Squares (RSS) ---\n")
+for (model_name in names(rss_estimates)) {
+  cat("\n", model_name, "RSS =", rss_estimates[[model_name]], "\n")
 }
 ```
 
+
+
 ## Task 2.3: Log-likelihood and Variance Calculation
 ```{r}
-# define function to compute log-likelihood and variance
-compute_loglikelihood_variance <- function(rss, n) {
-  # estimate error variance from RSS
-  sigma_squared <- rss / (n - 1)
-  
-  # compute log-likelihood under Gaussian error assumption
-  log_likelihood <- -(n/2) * log(2 * pi) - (n/2) * log(sigma_squared) - 
-                   (1/(2 * sigma_squared)) * rss
-  
-  return(list(log_likelihood = log_likelihood, variance = sigma_squared))
+# Constants for Log-Likelihood Calculation 
+n <- nrow(target) # Number of data samples
+ln_2pi <- log(2 * pi) # Pre-calculate ln(2π)
+
+# Compute Log-Likelihood and Variance for each model 
+log_likelihood_values <- list()
+variance_estimates <- list() # List to store calculated variances (sigma_hat_squared)
+
+# Iterate through the RSS values
+for (model_name in names(rss_estimates)) {
+  current_rss <- rss_estimates[[model_name]]
+
+  # Only compute log-likelihood if RSS is a valid number
+  if (!is.na(current_rss) && is.numeric(current_rss)) {
+    # Calculate sigma_hat_squared 
+    sigma_hat_squared <- current_rss / (n - 1)
+    variance_estimates[[model_name]] <- sigma_hat_squared # Store the variance
+
+    # Check for non-positive or zero sigma_hat_squared before log
+    if (sigma_hat_squared <= 0) {
+      warning(paste("Model", model_name, ": sigma_hat_squared is non-positive or zero. Log-likelihood set to NA."))
+      log_likelihood_values[[model_name]] <- NA
+    } else {
+      # Compute the log-likelihood using the given formula
+      log_likelihood <- - (n / 2) * ln_2pi - (n / 2) * log(sigma_hat_squared) - (1 / (2 * sigma_hat_squared)) * current_rss
+      log_likelihood_values[[model_name]] <- log_likelihood
+    }
+  } else {
+    log_likelihood_values[[model_name]] <- NA # Set log-likelihood to NA if RSS was invalid
+    variance_estimates[[model_name]] <- NA # Set variance to NA if RSS was invalid
+  }
 }
 
-# calculate log-likelihood and variance for each model
-n_samples <- length(target)  # number of observations
-
-loglik_var_list_all_models <- lapply(names(model_definitions), function(model_name) {
-  # Get RSS for the model
-  if (model_name == "Model1") {
-    rss_val <- rss_values[["Model1"]]
-  } else if (model_name == "Model2") {
-    rss_val <- rss_values[["Model2"]]
-  } else if (model_name == "Model3") {
-    rss_val <- rss_values[["Model3"]]
-  } else if (model_name == "Model4") {
-    rss_val <- rss_values[["Model4"]]
-  } else if (model_name == "Model5") {
-    rss_val <- rss_values[["Model5"]]
-  } else {
-    return(list(log_likelihood = NA, variance = NA)) # Handle unexpected model name
-  }
-
-  if (is.na(rss_val)) {
-    return(list(log_likelihood = NA, variance = NA)) # Return NA if RSS is NA
-  }
-
-  results <- compute_loglikelihood_variance(rss_val, n_samples)
-  return(results)
-})
-names(loglik_var_list_all_models) <- names(model_definitions) # Assign model names
-
-
-# Display the results in your preferred format
-for (model_name in names(loglik_var_list_all_models)) {
-  results <- loglik_var_list_all_models[[model_name]]
-  cat("Model ", gsub("Model", "", model_name), ":\n", sep = "") # Display "Model 1" instead of "Model1"
-  cat("Log-likelihood: ", results$log_likelihood, "\n", sep = "")
-  cat("Variance: ", results$variance, "\n\n", sep = "")
+cat("\n--- Task 2.3: Log-Likelihood and Variance Estimates ---\n")
+for (model_name in names(log_likelihood_values)) {
+  cat("\n", model_name, "\n")
+  cat("  Variance (σ̂²):", variance_estimates[[model_name]], "\n")
+  cat("  Log-Likelihood:", log_likelihood_values[[model_name]], "\n")
 }
 ```
 
 ## Task 2.4: Compute AIC and BIC
 ```{r}
-# define functions to compute AIC and BIC
-compute_aic <- function(log_likelihood, k) {
-  aic <- 2 * k - 2 * log_likelihood
-  return(aic)
+# Constants for AIC/BIC Calculation 
+n <- nrow(target) # Number of data samples
+
+# Define 'k' (number of estimated parameters) for each model
+k_values <- list(
+  Model1 = 3, # θ1·x4 + θ2·x3² + θbias
+  Model2 = 4, # θ1·x4 + θ2·x3² + θ3·x5 + θbias
+  Model3 = 4, # θ1·x3 + θ2·x4 + θ3·x5³ + θbias
+  Model4 = 4, # θ1·x4 + θ2·x3² + θ3·x5³ + θbias
+  Model5 = 4  # θ1·x4 + θ2·x1² + θ3·x3² + θbias
+)
+
+# Compute AIC and BIC for each model
+aic_values <- list()
+bic_values <- list()
+
+# Iterate through the log-likelihood values from Task 2.3
+for (model_name in names(log_likelihood_values)) {
+  current_log_likelihood <- log_likelihood_values[[model_name]]
+  k_param <- k_values[[model_name]] # Get the 'k' value for the current model
+
+  # Only compute AIC/BIC if log-likelihood is a valid number and k is defined
+  if (!is.na(current_log_likelihood) && is.numeric(current_log_likelihood) &&
+      !is.null(k_param) && !is.na(k_param) && is.numeric(k_param)) {
+
+    # Compute AIC: AIC = 2k - 2 ln p(D|θ̂)
+    aic <- 2 * k_param - 2 * current_log_likelihood
+    aic_values[[model_name]] <- aic
+
+    # Compute BIC: BIC = k * ln(n) - 2 ln p(D|θ̂)
+    bic <- k_param * log(n) - 2 * current_log_likelihood
+    bic_values[[model_name]] <- bic
+
+  } else {
+    aic_values[[model_name]] <- NA # Set to NA if inputs were invalid
+    bic_values[[model_name]] <- NA # Set to NA if inputs were invalid
+  }
 }
 
-compute_bic <- function(log_likelihood, k, n) {
-  bic <- k * log(n) - 2 * log_likelihood
-  return(bic)
-}
-
-# Calculate AIC and BIC for each model
-aic_bic_list_all_models <- lapply(names(model_definitions), function(model_name) {
-  # Get log-likelihood for the current model
-  log_likelihood <- loglik_var_list_all_models[[model_name]]$log_likelihood
-  
-  # Determine the number of parameters (k) for the current model
-  # Assuming theta_list_all_models contains the parameter vectors
-  k <- length(theta_list_all_models[[model_name]][!is.na(theta_list_all_models[[model_name]])])
-  
-  # Get the number of observations (n)
-  n <- length(target)  # Assuming 'target' is your target variable
-  
-  # Calculate AIC and BIC
-  aic <- compute_aic(log_likelihood, k)
-  bic <- compute_bic(log_likelihood, k, n)
-  
-  return(list(AIC = aic, BIC = bic))
-})
-
-# Assign names to the results list
-names(aic_bic_list_all_models) <- names(model_definitions)
-
-# Print the AIC and BIC for each model
-for (model_name in names(aic_bic_list_all_models)) {
-  cat("Model ", gsub("Model", "", model_name), ":\n", sep = "")
-  cat("  AIC: ", aic_bic_list_all_models[[model_name]]$AIC, "\n", sep = "")
-  cat("  BIC: ", aic_bic_list_all_models[[model_name]]$BIC, "\n\n", sep = "")
+cat("\n--- Task 2.4: Akaike Information Criterion (AIC) & Bayesian Information Criterion (BIC) ---\n")
+for (model_name in names(aic_values)) {
+  cat("\n", model_name, "\n")
+  cat("  AIC:", aic_values[[model_name]], "\n")
+  cat("  BIC:", bic_values[[model_name]], "\n")
 }
 ```
 
 
 ## Task 2.5: Distribution of Model Prediction Errors
 ```{r}
-# define function to compute model prediction errors (residuals)
-compute_model_prediction_error <- function(X, y, theta, model_func) {
-  # generate predictions using the model
-  # Handle cases where X might be NULL or have zero rows or columns
-  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
-    y_pred <- rep(theta[1], length(y))  # Predict using only the intercept
-  } else {
-    X <- as.matrix(X)
-    # Ensure X has an intercept column; if not, add it
-    if (!("(Intercept)" %in% colnames(X))) {
-      X <- cbind("(Intercept)" = rep(1, nrow(X)), X)
-    }
-    y_pred <- X %*% theta
+# Model definitions to reconstruct X matrices for calculating residuals.
+model_x_builders <- list(
+  Model1 = function(features, scale_func) {
+    X_raw <- cbind(x4 = features[,"x4"], x3_squared = features[,"x3"]^2)
+    X_scaled <- scale_func(X_raw)
+    cbind("(Intercept)" = 1, X_scaled)
+  },
+  Model2 = function(features, scale_func) {
+    X_raw <- cbind(x4 = features[,"x4"], x3_squared = features[,"x3"]^2, x5 = features[,"x5"])
+    X_scaled <- scale_func(X_raw)
+    cbind("(Intercept)" = 1, X_scaled)
+  },
+  Model3 = function(features, scale_func) {
+    X_raw <- cbind(x3 = features[,"x3"], x4 = features[,"x4"], x5_cubed = features[,"x5"]^3)
+    X_scaled <- scale_func(X_raw)
+    cbind("(Intercept)" = 1, X_scaled)
+  },
+  Model4 = function(features, scale_func) {
+    X_raw <- cbind(x4 = features[,"x4"], x3_squared = features[,"x3"]^2, x5_cubed = features[,"x5"]^3)
+    X_scaled <- scale_func(X_raw)
+    cbind("(Intercept)" = 1, X_scaled)
+  },
+  Model5 = function(features, scale_func) {
+    X_raw <- cbind(x4 = features[,"x4"], x1_squared = features[,"x1"]^2, x3_squared = features[,"x3"]^2)
+    X_scaled <- scale_func(X_raw)
+    cbind("(Intercept)" = 1, X_scaled)
+  }
+)
+
+# Loop through each model to calculate residuals and generate Q-Q plots
+for (model_name in names(model_x_builders)) {
+  # Reconstruct the design matrix X using the builder function and global helpers
+  X <- model_x_builders[[model_name]](features, scale_features_matrix)
+
+  # Retrieve the estimated parameters (theta) for the current model
+  theta <- theta_estimates[[model_name]]
+
+  # Check if theta is valid and has correct dimensions before calculating residuals
+  if (is.null(theta) || any(is.na(theta)) || length(theta) != ncol(X)) {
+    warning(paste("Cannot compute residuals for", model_name, ": Invalid, missing, or dimension-mismatched theta estimates."))
+    next
   }
   
-  # calculate prediction errors/residuals
-  prediction_error <- y - y_pred
-  
-  return(prediction_error)
-}
-
-# Define model functions (these should match your model definitions)
-# Ensure these functions handle cases with no predictors gracefully
-model1_func <- function(X, theta) {
-  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
-    return(rep(theta[1], nrow(target)))  # Intercept-only model
-  } else {
-    X <- as.matrix(X)
-    # Ensure X has an intercept column; if not, add it
-    if (!("(Intercept)" %in% colnames(X))) {
-      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
-    }
-    return(X %*% theta)
+  # Ensure theta is a matrix for matrix multiplication
+  if (is.vector(theta)) {
+    theta <- matrix(theta, ncol = 1)
   }
-}
 
-model2_func <- function(X, theta) {
-  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
-    return(rep(theta[1], nrow(target)))  # Intercept-only model
-  } else {
-    X <- as.matrix(X)
-    # Ensure X has an intercept column; if not, add it
-    if (!("(Intercept)" %in% colnames(X))) {
-      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
-    }
-    return(X %*% theta)
+  # Calculate predicted values (y_hat)
+  y_pred <- X %*% theta
+
+  # Calculate residuals (prediction errors): y - y_hat
+  residuals <- target - y_pred
+
+  # Flatten residuals to a vector for qqnorm function
+  residuals_vec <- as.vector(residuals)
+
+  # Check for NA/NaN/Inf in residuals before plotting
+  if (any(is.na(residuals_vec)) || any(is.infinite(residuals_vec))) {
+    warning(paste("Residuals for", model_name, "contain NA/Inf values. Q-Q plot may not be generated properly."))
+    next
   }
+
+  # Plot Q-Q plot
+  qqnorm(residuals_vec, main = paste("Q-Q Plot of Residuals for", model_name))
+  qqline(residuals_vec, col = "red")
 }
-
-model3_func <- function(X, theta) {
-  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
-    return(rep(theta[1], nrow(target)))  # Intercept-only model
-  } else {
-    X <- as.matrix(X)
-    # Ensure X has an intercept column; if not, add it
-    if (!("(Intercept)" %in% colnames(X))) {
-      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
-    }
-    return(X %*% theta)
-  }
-}
-
-model4_func <- function(X, theta) {
-  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
-    return(rep(theta[1], nrow(target)))  # Intercept-only model
-  } else {
-    X <- as.matrix(X)
-    # Ensure X has an intercept column; if not, add it
-    if (!("(Intercept)" %in% colnames(X))) {
-      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
-    }
-    return(X %*% theta)
-  }
-}
-
-model5_func <- function(X, theta) {
-  if (is.null(X) || nrow(X) == 0 || ncol(X) == 0) {
-    return(rep(theta[1], nrow(target)))  # Intercept-only model
-  } else {
-    X <- as.matrix(X)
-    # Ensure X has an intercept column; if not, add it
-    if (!("(Intercept)" %in% colnames(X))) {
-      X <- cbind("(Intercept)" = rep(1, nrow(target)), X)
-    }
-    return(X %*% theta)
-  }
-}
-
-# Calculate prediction errors for each model
-prediction_error_model1_vec <- compute_model_prediction_error(
-  X_final_processed_list_all_models[["Model1"]], target, theta_list_all_models[["Model1"]], model1_func
-)
-
-prediction_error_model2_vec <- compute_model_prediction_error(
-  X_final_processed_list_all_models[["Model2"]], target, theta_list_all_models[["Model2"]], model2_func
-)
-
-prediction_error_model3_vec <- compute_model_prediction_error(
-  X_final_processed_list_all_models[["Model3"]], target, theta_list_all_models[["Model3"]], model3_func
-)
-
-prediction_error_model4_vec <- compute_model_prediction_error(
-  X_final_processed_list_all_models[["Model4"]], target, theta_list_all_models[["Model4"]], model4_func
-)
-
-prediction_error_model5_vec <- compute_model_prediction_error(
-  X_final_processed_list_all_models[["Model5"]], target, theta_list_all_models[["Model5"]], model5_func
-)
-
-
-# create enhanced QQ plots to check for normality of residuals
-# function to create enhanced QQ plot
-create_enhanced_qq <- function(residuals, model_name) {
-  # generate QQ plot
-  qqnorm(residuals, main = paste("Q-Q Plot of Residuals for", model_name),
-         col = "blue", pch = 19, cex = 0.5)
-  qqline(residuals, col = "red", lwd = 2)
-  
-}
-
-# create QQ plots for all models
-create_enhanced_qq(prediction_error_model1_vec, "Model 1")
-create_enhanced_qq(prediction_error_model2_vec, "Model 2")
-create_enhanced_qq(prediction_error_model3_vec, "Model 3")
-create_enhanced_qq(prediction_error_model4_vec, "Model 4")
-create_enhanced_qq(prediction_error_model5_vec, "Model 5")
 ```
 
+
 ```{r}
-# compile all model evaluation metrics into a comprehensive table
+
+# Compile all model evaluation metrics into a comprehensive table 
 model_comparison <- data.frame(
-  Model = names(model_definitions),
-  Parameters = sapply(theta_list_all_models, function(theta) length(theta[!is.na(theta)])),
-  RSS = sapply(rss_values, function(rss) ifelse(is.null(rss) || length(rss) == 0 || is.na(rss), NA, rss)),
-  LogLikelihood = sapply(loglik_var_list_all_models, function(item) ifelse(is.null(item) || is.na(item$log_likelihood), NA, item$log_likelihood)),
-  AIC = sapply(aic_bic_list_all_models, function(item) ifelse(is.null(item) || is.na(item$AIC), NA, item$AIC)),
-  BIC = sapply(aic_bic_list_all_models, function(item) ifelse(is.null(item) || is.na(item$BIC), NA, item$BIC)),
-  Variance = sapply(loglik_var_list_all_models, function(item) ifelse(is.null(item) || is.na(item$variance), NA, item$variance))
+  Model = names(theta_estimates), # Using names from theta_estimates
+  Parameters = sapply(theta_estimates, function(theta) length(theta[!is.na(theta)])), 
+  RSS = sapply(rss_estimates, function(rss) ifelse(is.null(rss) || length(rss) == 0 || is.na(rss), NA, rss)), 
+  LogLikelihood = sapply(log_likelihood_values, function(val) ifelse(is.null(val) || is.na(val), NA, val)), 
+  AIC = sapply(aic_values, function(val) ifelse(is.null(val) || is.na(val), NA, val)), 
+  BIC = sapply(bic_values, function(val) ifelse(is.null(val) || is.na(val), NA, val)), 
+  Variance = sapply(variance_estimates, function(val) ifelse(is.null(val) || is.na(val), NA, val)) 
 )
 
-# display the comprehensive table
-kable(model_comparison, 
-      caption = "Comprehensive Comparison of All Models", 
-      digits = c(0, 0, 2, 2, 2, 2, 4))
+# Display the comprehensive table 
+cat("\n--- Comprehensive Comparison of All Models ---\n")
+print(kable(model_comparison,
+            caption = "Comprehensive Comparison of All Models",
+            digits = c(0, 0, 2, 2, 2, 2, 4)))
+cat("\n") # Add a newline for better separation
 
-# rank models based on different criteria
-rank_rss <- rank(model_comparison$RSS, na.last = "keep")
-rank_aic <- rank(model_comparison$AIC, na.last = "keep")
-rank_bic <- rank(model_comparison$BIC, na.last = "keep")
-rank_loglik <- rank(-model_comparison$LogLikelihood, na.last = "keep")  # Negative because higher is better
+# Rank models based on different criteria 
+# Lower values are better for RSS, AIC, BIC. Higher values are better for LogLikelihood, so we rank negatively.
+rank_rss <- rank(model_comparison$RSS, na.last = "keep", ties.method = "min")
+rank_aic <- rank(model_comparison$AIC, na.last = "keep", ties.method = "min")
+rank_bic <- rank(model_comparison$BIC, na.last = "keep", ties.method = "min")
+rank_loglik <- rank(-model_comparison$LogLikelihood, na.last = "keep", ties.method = "min") # Negative because higher is better
 
 ranking_table <- data.frame(
   Model = model_comparison$Model,
   RSS_Rank = rank_rss,
   AIC_Rank = rank_aic,
   BIC_Rank = rank_bic,
-  LogLikelihood_Rank = rank_loglik,
-  Overall_Rank = rank_rss + rank_aic + rank_bic + rank_loglik
+  LogLikelihood_Rank = rank_loglik
 )
 
-# sort by overall rank (lower is better)
+# Calculate Overall_Rank by summing individual ranks, considering only valid ranks
+ranking_table$Overall_Rank <- rowSums(ranking_table[, c("RSS_Rank", "AIC_Rank", "BIC_Rank", "LogLikelihood_Rank")], na.rm = TRUE)
+
+# Sort by overall rank (lower sum is better)
 ranking_table <- ranking_table[order(ranking_table$Overall_Rank),]
 
-# display the ranking table
-kable(ranking_table, 
-      caption = "Model Ranking Based on Different Criteria (Lower is Better)")
+# Display the ranking table 
+cat("\n--- Model Ranking Based on Different Criteria (Lower Sum of Ranks is Better) ---\n")
+print(kable(ranking_table,
+            caption = "Model Ranking Based on Different Criteria (Lower is Better)"))
+cat("\n") # Add a newline for better separation
 
-# determine the best model based on our criteria
+# Determine the best model based on individual criteria 
 best_model_aic_index <- which.min(model_comparison$AIC)
 best_model_aic_name <- model_comparison$Model[best_model_aic_index]
 
@@ -744,316 +692,384 @@ best_model_loglik_name <- model_comparison$Model[best_model_loglik_index]
 best_model_rss_index <- which.min(model_comparison$RSS)
 best_model_rss_name <- model_comparison$Model[best_model_rss_index]
 
-
 cat(paste("Based on AIC, the best model is:", best_model_aic_name, "\n"))
 cat(paste("Based on BIC, the best model is:", best_model_bic_name, "\n"))
 cat(paste("Based on Log-Likelihood, the best model is:", best_model_loglik_name, "\n"))
 cat(paste("Based on RSS, the best model is:", best_model_rss_name, "\n"))
 ```
 
-## Train-Test Split
-```{r}
-set.seed(123)
 
-# create indices for 70% train, 30% test split
+
+## Train-Test Split
+
+
+```{r}
+
+set.seed(123) # Set seed for reproducibility of data splitting
+
+cat("\n--- Task 2.7: Training/Testing Split, Prediction, and Confidence Intervals ---\n")
+
+# Split the input (features) and output (target) dataset
 sample_size <- nrow(features)
 train_indices <- sample(sample_size, size = round(0.7 * sample_size))
 test_indices <- setdiff(1:sample_size, train_indices)
 
-# create training and testing datasets
+# Create training and testing datasets
 train_features <- features[train_indices, ]
 train_target <- target[train_indices, ]
 test_features <- features[test_indices, ]
-test_target <- target[test_indices, ]
+y_test <- target[test_indices, ] 
 
-train_X <- data.frame(x4 = train_features[,"x4"], 
-                     x1_squared = train_features[,"x1"]^2, 
-                     x3_squared = train_features[,"x3"]^2)
-                     
-test_X <- data.frame(x4 = test_features[,"x4"], 
-                    x1_squared = test_features[,"x1"]^2, 
-                    x3_squared = test_features[,"x3"]^2)
+cat(paste0("Data split: Training samples = ", nrow(train_features), ", Testing samples = ", nrow(test_features), "\n"))
 
-# Scale the training data (excluding intercept if it exists)
-train_X_scaled <- scale(train_X)
-train_X_scaled_no_intercept <- train_X_scaled[, !(colnames(train_X_scaled) %in% "(Intercept)")]
 
-# estimate parameters using training data
-train_theta <- estimate_theta_ols_scaled(train_X_scaled_no_intercept, train_target, lambda_ols_param)
+# Use the best model and estimate its parameters using the training dataset 
+best_model_name <- best_model_aic_name
 
-cat("Model 5 parameters estimated on training data:\n")
-print(train_theta)
+# Reconstruct the design matrix (X_train) for the best model using training features
+if (!exists("model_x_builders") || is.null(model_x_builders[[best_model_name]])) {
+  stop("model_x_builders or the builder for the best model is not available. Please ensure Task 2.5 code is run first.")
+}
+X_train_model <- model_x_builders[[best_model_name]](train_features, scale_features_matrix)
 
-# calculate predictions on test data
-test_predictions <- model5(test_X, train_theta)
+# Estimate model parameters use the training dataset
+theta_train <- fit_ls(X_train_model, train_target)
+rownames(theta_train) <- colnames(X_train_model)
 
-# calculate test error metrics
-test_rss <- sum((test_target - test_predictions)^2)
-test_rmse <- sqrt(mean((test_target - test_predictions)^2))
-test_mae <- mean(abs(test_target - test_predictions))
-test_r_squared <- 1 - sum((test_target - test_predictions)^2) / sum((test_target - mean(test_target))^2)
+cat(paste0("\nEstimated parameters for ", best_model_name, " using training data:\n"))
+print(theta_train)
 
-# display test metrics
+
+# Compute the model's output/prediction on the testing data
+X_test_model <- model_x_builders[[best_model_name]](test_features, scale_features_matrix)
+
+# Compute predictions on the testing data
+y_pred_test <- X_test_model %*% theta_train
+
+
+# Calculate Test Error Metrics
+test_rss <- sum((y_test - y_pred_test)^2)
+test_rmse <- sqrt(mean((y_test - y_pred_test)^2))
+test_mae <- mean(abs(y_test - y_pred_test))
+test_r_squared <- 1 - sum((y_test - y_pred_test)^2) / sum((y_test - mean(y_test))^2)
+
+# Display test metrics
 test_metrics <- data.frame(
   Metric = c("RSS", "RMSE", "MAE", "R-squared"),
   Value = c(test_rss, test_rmse, test_mae, test_r_squared)
 )
 
-kable(test_metrics, caption = "Model Performance on Test Data")
-```
+cat(paste0("\n--- Model Performance on Test Data (", best_model_name, ") ---\n"))
+print(kable(test_metrics, caption = paste0("Model Performance on Test Data for ", best_model_name)))
+cat("\n")
 
-### Calculate Confidence Intervals and Visualization
-```{r}
-# function to compute confidence intervals for predictions
-compute_confidence_intervals <- function(predictions, variance, confidence_level = 0.95) {
-  # number of observations
-  n_obs <- length(predictions)
-  
-  # calculate margin of error for the confidence interval
-  alpha <- 1 - confidence_level
-  t_critical <- qt(1 - alpha/2, df = n_obs - 4)  # 4 parameters in Model 5
-  margin_error <- t_critical * sqrt(variance)
-  
-  # return lower and upper bounds
-  return(list(
-    lower = predictions - margin_error,
-    upper = predictions + margin_error
-  ))
-}
 
-# compute the variance of model prediction errors from training data
-model5_prediction_errors <- train_target - model5(train_X, train_theta)
-model5_prediction_variance <- var(model5_prediction_errors)
+# Compute 95% (model prediction) confidence intervals 
+n_train <- nrow(X_train_model)
+k_params <- ncol(X_train_model) # Number of estimated parameters including intercept
 
-# compute 95% confidence intervals
-ci <- compute_confidence_intervals(test_predictions, model5_prediction_variance, 0.95)
+# Calculate residuals from the training fit to estimate sigma_hat_squared
+residuals_train <- train_target - (X_train_model %*% theta_train)
+rss_train <- sum(residuals_train^2)
 
-# create dataframe for plotting
-plot_data <- data.frame(
-  Observation = 1:length(test_predictions),
-  Actual = test_target,
-  Predicted = test_predictions,
-  Lower_CI = ci$lower,
-  Upper_CI = ci$upper
+# Estimate variance of residuals (sigma_hat_squared) from training data
+sigma_hat_squared_train <- rss_train / (n_train - k_params)
+sigma_hat_train <- sqrt(sigma_hat_squared_train)
+
+# Calculate the inverse of (X_train_model'X_train_model)
+XTX_inv_train <- tryCatch(
+  solve(t(X_train_model) %*% X_train_model),
+  error = function(e) {
+    warning("Matrix (X'X) is singular for training data. Using ginv from MASS for inverse.")
+    ginv(t(X_train_model) %*% X_train_model)
+  }
 )
 
-# create visualization of predictions with confidence intervals
-ggplot(plot_data, aes(x = Observation)) +
-  # plot actual observations
-  geom_point(aes(y = Actual), color = "blue", alpha = 0.5, size = 1.5) +
-  # plot predicted values
-  geom_line(aes(y = Predicted), color = "red", size = 1) +
-  # add confidence interval ribbon
-  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI), alpha = 0.2, fill = "gray") +
-  # customize plot appearance
-  theme_minimal() +
+# Degrees of freedom for t-distribution
+df <- n_train - k_params
+if (df <= 0) {
+  warning("Degrees of freedom are zero or negative. Cannot compute confidence intervals.")
+  lower_ci <- rep(NA, nrow(y_pred_test))
+  upper_ci <- rep(NA, nrow(y_pred_test))
+} else {
+  # T-value for 95% confidence (alpha = 0.05, two-tailed)
+  t_critical <- qt(0.975, df = df)
+
+  # Calculate prediction intervals for each test point
+  lower_ci <- numeric(nrow(X_test_model))
+  upper_ci <- numeric(nrow(X_test_model))
+
+  for (i in 1:nrow(X_test_model)) {
+    x0_t <- matrix(X_test_model[i, ], nrow = 1) # Transpose to row vector
+    # Variance of the prediction for a new observation
+    pred_variance <- sigma_hat_squared_train * (1 + x0_t %*% XTX_inv_train %*% t(x0_t))
+    pred_sd <- sqrt(pred_variance)
+
+    margin_of_error <- t_critical * pred_sd
+
+    lower_ci[i] <- y_pred_test[i] - margin_of_error
+    upper_ci[i] <- y_pred_test[i] + margin_of_error
+  }
+}
+
+# Convert to vectors for plotting consistency in ggplot
+y_test_vec <- as.vector(y_test)
+y_pred_test_vec <- as.vector(y_pred_test)
+
+# Prepare data for ggplot
+plot_data <- data.frame(
+  index = seq_along(y_test_vec),   # Use seq_along on the vector
+  Actual = y_test_vec,             # Use the vector directly
+  Predicted = y_pred_test_vec,     # Use the vector directly
+  LowerCI = lower_ci,
+  UpperCI = upper_ci
+)
+
+# Generate ggplot
+ggplot(plot_data, aes(x = index)) +
+  geom_ribbon(aes(ymin = LowerCI, ymax = UpperCI, fill = "95% CI"), alpha = 0.2, na.rm = TRUE) + # Shaded CI
+  geom_line(aes(y = Predicted, color = "Predicted"), linetype = "dashed", size = 0.8, na.rm = TRUE) + # Predicted line
+  geom_point(aes(y = Actual, color = "Actual"), size = 1.0, alpha = 0.7, na.rm = TRUE) + # Actual points
+  scale_color_manual(name = "colour",
+                     values = c("Actual" = "blue", "Predicted" = "red")) +
+  scale_fill_manual(name = "fill", values = c("95% CI" = "grey")) +
   labs(
-    title = "Test Data Predictions with 95% Confidence Intervals - Model 5",
-    x = "Observation Index",
-    y = "Net Hourly Electrical Energy Output (MW)"
+    title = paste0(best_model_name, " : Actual vs. Predicted with 95% CI (Test Set)"), # Match title style
+    x = "index", # Match x-axis label style
+    y = "Net hourly output" # Match y-axis label style
   ) +
+  theme_minimal() + # Use a minimal theme
   theme(
-    plot.title = element_text(face = "bold"),
-    axis.title = element_text(face = "bold")
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
   )
 ```
 
 # Task 3: Approximate Bayesian Computation (ABC)
+##  Posterior Distribution and Parameter Estimation
 ```{r}
-# two parameters with largest absolute values in Model 5
-param_abs_values <- abs(train_theta)
 
-intercept_index <- 4
-param_abs_values[intercept_index] <- 0  # Exclude intercept from consideration
+# Specify Model 5 as the best model
+best_model_name_abc <- "Model5"
+cat(paste0("Using '", best_model_name_abc, "' as the best model for ABC, as instructed.\n"))
 
-# find indices of two largest parameter values
-top_param_indices <- order(param_abs_values, decreasing = TRUE)[1:2]
-top_param_values <- train_theta[top_param_indices]
-
-cat("The two parameters with largest absolute values are at positions", 
-    top_param_indices, "with values", top_param_values, "\n")
-
-# define bounds for uniform prior
-prior_bounds <- matrix(0, nrow = 2, ncol = 2)
-for(i in 1:2) {
-  param_value <- top_param_values[i]
-  prior_bounds[i, 1] <- param_value - 0.5 * abs(param_value)  # Lower bound
-  prior_bounds[i, 2] <- param_value + 0.5 * abs(param_value)  # Upper bound
+# Ensure the model_x_builder for Model 5 is available
+if (!exists("model_x_builders") || is.null(model_x_builders[[best_model_name_abc]])) {
+  stop("model_x_builders or the builder for Model5 is not available. Please ensure Task 2.5 code is run first.")
 }
 
-cat("Prior bounds for the two parameters:\n")
-print(prior_bounds)
-```
+# Construct the full design matrix for Model 5 using the entire dataset
+X_model_5_full <- model_x_builders[[best_model_name_abc]](features, scale_features_matrix)
 
-## Uniform Distribution
-```{r}
-# function to simulate data from Model 5 with given parameters
-simulate_data <- function(X, theta_modified, orig_theta, param_indices) {
-  # create a copy of the original theta
-  theta_copy <- orig_theta
-  
-  # modify only the two selected parameters
-  theta_copy[param_indices] <- theta_modified
-  
-  # generate predictions using Model 5 with modified parameters
-  simulated_y <- model5(X, theta_copy)
-  
-  # add Gaussian noise based on estimated variance
-  noise_sd <- sqrt(model5_prediction_variance)
-  simulated_y <- simulated_y + rnorm(length(simulated_y), mean = 0, sd = noise_sd)
-  
-  return(simulated_y)
-}
+# Estimate parameters for Model 5 using the full dataset
+theta_estimate_model_5_full <- fit_ls(X_model_5_full, target)
+rownames(theta_estimate_model_5_full) <- colnames(X_model_5_full)
 
-# function to compute distance between observed and simulated data
-compute_distance <- function(observed, simulated) {
-  # using RMSE as the distance metric
-  return(sqrt(mean((observed - simulated)^2)))
-}
+cat(paste0("\nLeast squares estimates for ", best_model_name_abc, " (full dataset):\n"))
+print(theta_estimate_model_5_full)
 
-# rejection ABC algorithm
-rejection_abc <- function(X, observed_y, orig_theta, param_indices, prior_bounds, 
-                          n_samples = 5000, acceptance_rate = 0.05) {
-  # number of samples to accept
-  n_accept <- round(n_samples * acceptance_rate)
-  
-  # storage for samples and distances
-  all_samples <- matrix(0, nrow = n_samples, ncol = 2)
-  all_distances <- rep(0, n_samples)
-  
-  # generate samples from prior
-  for(i in 1:n_samples) {
-    # sample from uniform prior for the two parameters
-    theta_sample <- c(
-      runif(1, prior_bounds[1, 1], prior_bounds[1, 2]),
-      runif(1, prior_bounds[2, 1], prior_bounds[2, 2])
-    )
-    
-    # simulate data with sampled parameters
-    simulated_y <- simulate_data(X, theta_sample, orig_theta, param_indices)
-    
-    # compute distance
-    distance <- compute_distance(observed_y, simulated_y)
-    
-    # store sample and distance
-    all_samples[i, ] <- theta_sample
-    all_distances[i] <- distance
-  }
-  
-  # select samples with smallest distances
-  accepted_indices <- order(all_distances)[1:n_accept]
-  accepted_samples <- all_samples[accepted_indices, ]
-  accepted_distances <- all_distances[accepted_indices]
-  
-  return(list(
-    samples = accepted_samples,
-    distances = accepted_distances,
-    all_samples = all_samples,
-    all_distances = all_distances
-  ))
-}
+# Convert to a data frame for easier manipulation and sorting
+theta_df <- data.frame(
+  Parameter = rownames(theta_estimate_model_5_full),
+  Estimate = as.vector(theta_estimate_model_5_full)
+)
+theta_df$AbsEstimate <- abs(theta_df$Estimate)
+theta_df_ordered <- theta_df[order(-theta_df$AbsEstimate), ]
 
-# ABC
-set.seed(789)
-abc_results <- rejection_abc(
-  test_X, 
-  test_target, 
-  train_theta, 
-  top_param_indices, 
-  prior_bounds,
-  n_samples = 5000, 
-  acceptance_rate = 0.05
+# Select the top 2 parameters with largest absolute values to vary
+params_to_vary_info <- theta_df_ordered[1:2, ]
+params_to_vary_names <- params_to_vary_info$Parameter
+
+# The remaining parameters are fixed to their estimated values
+fixed_params_info <- theta_df_ordered[3:nrow(theta_df_ordered), ]
+fixed_params_values <- setNames(fixed_params_info$Estimate, fixed_params_info$Parameter)
+
+cat(paste0("\nParameters to vary in ABC (2 with largest absolute LS estimates):\n"))
+print(params_to_vary_info)
+cat(paste0("\nFixed parameters (and their estimated values):\n"))
+print(fixed_params_values)
+
+# Retrieve the LS estimates for the two parameters to be varied for prior centering
+prior_mean_param1 <- theta_estimate_model_5_full[params_to_vary_names[1], 1]
+prior_mean_param2 <- theta_estimate_model_5_full[params_to_vary_names[2], 1]
+
+# Define uniform prior ranges: centered around LS estimate, with a minimum width
+prior_range_half_param1 <- max(5 * abs(prior_mean_param1), 0.5) # Ensures exploration even if LS estimate is small
+prior_range_half_param2 <- max(5 * abs(prior_mean_param2), 0.5)
+
+prior_param1_min <- prior_mean_param1 - prior_range_half_param1
+prior_param1_max <- prior_mean_param1 + prior_range_half_param1
+
+prior_param2_min <- prior_mean_param2 - prior_range_half_param2
+prior_param2_max <- prior_mean_param2 + prior_range_half_param2
+
+priors_abc <- list(
+  param1 = list(name = params_to_vary_names[1], type = "uniform", min = prior_param1_min, max = prior_param1_max),
+  param2 = list(name = params_to_vary_names[2], type = "uniform", min = prior_param2_min, max = prior_param2_max)
 )
 
-# display summary of accepted samples
-cat("Summary of accepted parameter samples:\n")
-print(summary(abc_results$samples))
+cat("\nUniform prior distributions defined for the varying parameters:\n")
+print(priors_abc)
 
-cat("Mean accepted distance:", mean(abc_results$distances), "\n")
+# Function to sample a single set of parameters from the defined priors
+sample_from_priors <- function() {
+  param_samples <- c()
+  param_samples[priors_abc$param1$name] <- runif(1, priors_abc$param1$min, priors_abc$param1$max)
+  param_samples[priors_abc$param2$name] <- runif(1, priors_abc$param2$min, priors_abc$param2$max)
+  return(param_samples)
+}
+
+# Calculate the observed summary statistic (RSS) for the full model on the full data,
+y_pred_obs_full_model <- X_model_5_full %*% theta_estimate_model_5_full
+residuals_obs_full_model <- target - y_pred_obs_full_model
+observed_rss_full_model <- sum(residuals_obs_full_model^2)
+cat(paste0("\nObserved RSS (S_obs) of ", best_model_name_abc, " on full dataset: ", observed_rss_full_model, "\n"))
 ```
 
-## Visualizing ABC Results
+## Sample from ABC
 ```{r}
-# create data frames for visualization
-accepted_df <- data.frame(
-  Param1 = abc_results$samples[, 1],
-  Param2 = abc_results$samples[, 2],
-  Distance = abc_results$distances
-)
+# Function to calculate RSS for a given set of simulated parameters.
+calculate_simulated_rss <- function(simulated_theta_vector, X_matrix, observed_y) {
+  # Compute predictions using the simulated parameters and the design matrix
+  y_simulated <- X_matrix %*% simulated_theta_vector
 
-# joint posterior distribution
-ggplot(accepted_df, aes(x = Param1, y = Param2)) +
-  geom_point(alpha = 0.5, color = "blue") +
-  geom_point(data = data.frame(
-    Param1 = train_theta[top_param_indices[1]],
-    Param2 = train_theta[top_param_indices[2]]
-  ), color = "red", size = 5, shape = "+") +
-  labs(
-    title = "Joint Posterior Distribution from ABC",
-    x = paste("Parameter", top_param_indices[1]),
-    y = paste("Parameter", top_param_indices[2])
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold"),
-    axis.title = element_text(face = "bold")
+  # Calculate residuals by comparing simulated predictions to the actual observed data
+  residuals_simulated <- observed_y - y_simulated
+
+  # Compute the sum of squared residuals
+  rss <- sum(residuals_simulated^2)
+  return(rss)
+}
+
+cat(paste0("Summary statistic chosen: Residual Sum of Squares (RSS).\n"))
+cat(paste0("The observed RSS (S_obs) calculated in the previous block is: ", observed_rss_full_model, "\n"))
+```
+
+## Implement Rejection ABC Algorithm
+```{r}
+
+# Define ABC parameters
+num_simulations <- 1000 # Total number of parameter sets to propose and simulate
+num_accepted_samples <- 1000  # Desired number of samples for the posterior distribution
+
+# Setup parallel processing to speed up simulations
+num_cores <- detectCores() - 1 # Use all but one core to leave one for system/other tasks
+if (num_cores < 1) num_cores <- 1 # Ensure at least one core is used
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+cat(paste0("Registered ", num_cores, " cores for parallel processing of ABC simulations.\n"))
+
+# Get the full design matrix for the selected model (Model 5) and the observed target
+X_current_model_full <- model_x_builders[[best_model_name_abc]](features, scale_features_matrix)
+y_observed_full <- target
+
+set.seed(42) # Set seed for reproducibility of random sampling within ABC
+
+# Run the ABC simulations in parallel
+results <- foreach(
+  k = 1:num_simulations,
+  .combine = 'rbind', # Combine results row-wise into a data frame
+  .packages = c('matrixStats') 
+) %dopar% {
+  # Sample parameters from the prior distribution
+  proposed_theta_varying <- sample_from_priors()
+
+  # Construct the full proposed theta vector
+  # Start with the original LS estimates (which include fixed parameters)
+  # Then overwrite the varying parameters with the newly sampled ones
+  proposed_theta_full_sim <- theta_estimate_model_5_full
+  proposed_theta_full_sim[params_to_vary_names[1], 1] <- proposed_theta_varying[params_to_vary_names[1]]
+  proposed_theta_full_sim[params_to_vary_names[2], 1] <- proposed_theta_varying[params_to_vary_names[2]]
+
+  # Calculate the summary statistic for the simul  ated data
+  simulated_rss <- calculate_simulated_rss(
+    simulated_theta_vector = proposed_theta_full_sim,
+    X_matrix = X_current_model_full,
+    observed_y = y_observed_full
   )
 
-# marginal posterior distributions
+  # Calculate the distance between the observed and simulated summary statistics
+  distance <- abs(observed_rss_full_model - simulated_rss)
 
-# first parameter
-hist(abc_results$samples[, 1], breaks = 20, 
-     main = paste("Marginal Posterior for Parameter", top_param_indices[1]),
-     xlab = paste("Parameter", top_param_indices[1]),
-     col = "skyblue", border = "white")
-abline(v = train_theta[top_param_indices[1]], col = "red", lwd = 2, lty = 2)
+  # Return the proposed parameters and their distance
+  data.frame(
+    param1_val = proposed_theta_varying[params_to_vary_names[1]],
+    param2_val = proposed_theta_varying[params_to_vary_names[2]],
+    distance = distance
+  )
+}
 
-# second parameter
-hist(abc_results$samples[, 2], breaks = 20, 
-     main = paste("Marginal Posterior for Parameter", top_param_indices[2]),
-     xlab = paste("Parameter", top_param_indices[2]),
-     col = "lightgreen", border = "white")
-abline(v = train_theta[top_param_indices[2]], col = "red", lwd = 2, lty = 2)
+# Stop the parallel cluster after simulations are complete
+stopCluster(cl)
+cat("\nParallel processing stopped.\n")
 
+# Sort the results by distance and select the 'num_accepted_samples' with the smallest distances
+results_sorted <- results[order(results$distance), ]
+accepted_samples_df <- results_sorted[1:num_accepted_samples, ]
+
+# The final epsilon is determined by the largest distance among the accepted samples
+final_epsilon <- max(accepted_samples_df$distance)
+
+cat(paste0("\nABC Algorithm finished.\n"))
+cat(paste0("Total simulations performed: ", num_simulations, "\n"))
+cat(paste0("Number of accepted posterior samples: ", nrow(accepted_samples_df), "\n"))
+cat(paste0("Final effective epsilon (tolerance for accepted samples): ", final_epsilon, "\n"))
+
+# Store the accepted parameter samples for subsequent plotting
+posterior_samples <- accepted_samples_df[, 1:2]
+colnames(posterior_samples) <- params_to_vary_names
 ```
 
-## Joint and Marginal Posterior Distribution
 ```{r}
-# calculate 95% credible intervals for the parameters
-ci_param1 <- quantile(abc_results$samples[, 1], c(0.025, 0.975))
-ci_param2 <- quantile(abc_results$samples[, 2], c(0.025, 0.975))
+cat("\n--- Task 3 - Sub-question 4 (Continued): Plot Marginal and Joint Posterior Distributions ---\n")
 
-cat("95% Credible interval for Parameter", top_param_indices[1], ":", ci_param1, "\n")
-cat("95% Credible interval for Parameter", top_param_indices[2], ":", ci_param2, "\n")
+# Convert the collected posterior samples into a data frame suitable for ggplot
+posterior_df <- as.data.frame(posterior_samples)
 
-# create density plots with credible intervals
+# Plot Marginal Posterior Distribution for the First Varying Parameter 
+p_marginal1 <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[1]]])) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightblue", color = "black") + 
+  geom_density(color = "darkblue", linewidth = 1) +
+  labs(
+    title = paste("Marginal Posterior for Parameter:", params_to_vary_names[1]), 
+    x = paste("Value of", params_to_vary_names[1]), 
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold")) 
 
-# first parameter density
-plot(density(abc_results$samples[, 1]), 
-     main = paste("Parameter", top_param_indices[1], "Posterior"),
-     xlab = paste("Parameter", top_param_indices[1]),
-     col = "blue", lwd = 2)
-abline(v = train_theta[top_param_indices[1]], col = "red", lwd = 2, lty = 2)
-abline(v = ci_param1, col = "darkblue", lwd = 1, lty = 3)
-legend("topright", 
-       legend = c("Posterior Density", "Point Estimate", "95% Credible Interval"),
-       col = c("blue", "red", "darkblue"), 
-       lty = c(1, 2, 3), 
-       lwd = c(2, 2, 1))
+print(p_marginal1)
 
-# second parameter density
-plot(density(abc_results$samples[, 2]), 
-     main = paste("Parameter", top_param_indices[2], "Posterior"),
-     xlab = paste("Parameter", top_param_indices[2]),
-     col = "green", lwd = 2)
-abline(v = train_theta[top_param_indices[2]], col = "red", lwd = 2, lty = 2)
-abline(v = ci_param2, col = "darkgreen", lwd = 1, lty = 3)
-legend("topright", 
-       legend = c("Posterior Density", "Point Estimate", "95% Credible Interval"),
-       col = c("green", "red", "darkgreen"), 
-       lty = c(1, 2, 3), 
-       lwd = c(2, 2, 1))
+# Plot Marginal Posterior Distribution for the Second Varying Parameter 
+p_marginal2 <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[2]]])) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightgreen", color = "black") +
+  geom_density(color = "darkgreen", linewidth = 1) +
+  labs(
+    title = paste("Marginal Posterior for Parameter:", params_to_vary_names[2]), 
+    x = paste("Value of", params_to_vary_names[2]),
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
+print(p_marginal2)
+
+# Plot the Joint Posterior Distribution of the Two Varying Parameters 
+p_joint <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[1]]], y = .data[[params_to_vary_names[2]]])) +
+  geom_point(alpha = 0.2, color = "purple") + 
+  geom_density_2d(color = "darkblue", linewidth = 0.8) + 
+  labs(
+    title = paste("Joint Posterior Distribution of", params_to_vary_names[1], "and", params_to_vary_names[2]),
+    x = paste("Value of", params_to_vary_names[1]), 
+    y = paste("Value of", params_to_vary_names[2]) 
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+print(p_joint)
 
 ```
 
