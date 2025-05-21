@@ -26,7 +26,7 @@ library(dplyr)      # for data manipulation
 library(knitr)      # for tables
 library(doParallel) # For parallel processing
 library(foreach)    # For parallel processing (used with doParallel)
-library(ggdensity) # Optional: For enhanced 2D density plots/contours
+library(ggdensity)  # For enhanced 2D density plots/contours
 ```
 
 # Loading Datasets
@@ -84,7 +84,7 @@ plot_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab
   time_indices_to_plot <- seq_along(time_series)
   rolling_mean_to_plot <- NULL
   
-  # 1. Rolling Average Calculation
+  # Rolling Average Calculation
   if (rolling_avg) {
     rolling_mean <- stats::filter(time_series, rep(1/rolling_window, rolling_window), sides = 2)
     
@@ -96,7 +96,7 @@ plot_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab
     rolling_mean_to_plot <- rolling_mean
   }
   
-  # 2. Sampling at Intervals
+  # Sampling at Intervals
   if (!is.null(sample_interval)) {
     sampled_indices <- seq(1, length(time_series_to_plot), by = sample_interval)
     time_series_to_plot <- time_series_to_plot[sampled_indices]
@@ -106,7 +106,7 @@ plot_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab
     }
   }
   
-  # 3. Plotting
+  # Plotting
   plot(time_indices_to_plot, time_series_to_plot,
        type = "l",
        main = var_name,
@@ -117,7 +117,7 @@ plot_time_series_enhanced <- function(time_series, var_name, xlab = "Time", ylab
        cex.main = 1.4
   )
   
-  # 4. Add Rolling Average Line (if requested)
+  # Add Rolling Average Line (if requested)
   if (rolling_avg) {
     lines(time_indices_to_plot, rolling_mean_to_plot, col = "red", lwd = 2)
     legend("topright", legend = c("Original (or Sampled)", paste(rolling_window, "-Point Avg")),
@@ -147,7 +147,7 @@ plot_target_time_series_enhanced <- function(time_series, var_name, xlab = "Time
   time_indices_to_plot <- seq_along(time_series)
   rolling_mean_to_plot <- NULL
 
-  # 1. Rolling Average Calculation
+  # Rolling Average Calculation
   if (rolling_avg) {
     rolling_mean <- stats::filter(time_series, rep(1/rolling_window, rolling_window), sides = 2)
 
@@ -159,7 +159,7 @@ plot_target_time_series_enhanced <- function(time_series, var_name, xlab = "Time
     rolling_mean_to_plot <- rolling_mean
   }
 
-  # 2. Sampling at Intervals
+  # Sampling at Intervals
   if (!is.null(sample_interval)) {
     sampled_indices <- seq(1, length(time_series_to_plot), by = sample_interval)
     time_series_to_plot <- time_series_to_plot[sampled_indices]
@@ -169,7 +169,7 @@ plot_target_time_series_enhanced <- function(time_series, var_name, xlab = "Time
     }
   }
 
-  # 3. Plotting
+  # Plotting
   plot(time_indices_to_plot, time_series_to_plot,
        type = "l",
        main = var_name,
@@ -181,7 +181,7 @@ plot_target_time_series_enhanced <- function(time_series, var_name, xlab = "Time
        cex.main = 1.4
   )
 
-  # 4. Add Rolling Average Line (if requested)
+  # Add Rolling Average Line 
   if (rolling_avg) {
     lines(time_indices_to_plot, rolling_mean_to_plot, col = "red", lwd = 2)
     legend("topright", legend = c("Original (or Sampled)", paste(rolling_window, "-Point Avg")),
@@ -292,10 +292,10 @@ plots <- list(
   x5 = c("Exhaust Vacuum (cm Hg)",  "Net Energy Output (MW)")
 )
 
-# Reset to single plot (ensure only one plot is drawn at a time)
+# Reset to single plot
 par(mfrow = c(1, 1), mar = c(4, 4, 2, 1))
 
-# Loop over each feature → plot(feature, target) with its own color
+# Loop over each feature -> plot(feature, target) with its own color
 for (name in names(plots)) {
   labs <- plots[[name]]
   x    <- features[, name]
@@ -308,7 +308,7 @@ for (name in names(plots)) {
     main  = paste(labs[1], "vs", labs[2]),
     pch   = 16,
     cex   = 0.6,
-    col   = plot_colors[which(names(plots) == name)]  # Correct color selection
+    col   = plot_colors[which(names(plots) == name)]  
   )
 }
 
@@ -326,14 +326,12 @@ fit_ls <- function(X, y) {
   ginv(t(X) %*% X) %*% t(X) %*% y
 }
 
-# function scales columns  and handles cases where
-# a column might be constant
+# function scales columns  and handles cases where a column might be constant
 scale_features_matrix <- function(mat) {
   if (is.null(mat) || ncol(mat) == 0) {
     return(matrix(nrow = nrow(mat), ncol = 0)) # Return empty matrix if input is empty
   }
   scaled_mat <- scale(mat)
-  #
   scaled_mat[is.na(scaled_mat)] <- 0
   return(scaled_mat)
 }
@@ -342,14 +340,14 @@ scale_features_matrix <- function(mat) {
 theta_estimates <- list()
 
 # Model 1: y = θ1·x4 + θ2·x3² + θbias
-# 1. Create raw feature matrix for this model
+# Create raw feature matrix for this model
 X1_raw_features <- cbind(x4 = features[,"x4"],
                          x3_squared = features[,"x3"]^2)
-# 2. Scale these raw features
+# Scale these raw features
 X1_scaled_features <- scale_features_matrix(X1_raw_features)
-# 3. Add the intercept column to the scaled features
+# Add the intercept column to the scaled features
 X1 <- cbind("(Intercept)" = 1, X1_scaled_features)
-# 4. Fit the OLS model
+# Fit the OLS model
 theta_estimates[["Model1"]] <- fit_ls(X1, target)
 rownames(theta_estimates[["Model1"]]) <- colnames(X1)
 
@@ -415,7 +413,7 @@ compute_rss_matrix <- function(X, y, theta) {
 rss_estimates <- list()
 
 # Model 1: y = θ1·x4 + θ2·x3² + θbias
-theta_1 <- theta_estimates[["Model1"]] # Get theta from Task 2.1's output
+theta_1 <- theta_estimates[["Model1"]] 
 if (!all(is.na(theta_1))) {
   rss_estimates[["Model1"]] <- compute_rss_matrix(X1, target, theta_1)
 } else {
@@ -459,7 +457,7 @@ if (!all(is.na(theta_5))) {
 }
 
 
-cat("\n--- Task 2.2: Residual Sum of Squares (RSS) ---\n")
+cat("\nResidual Sum of Squares (RSS) \n")
 for (model_name in names(rss_estimates)) {
   cat("\n", model_name, "RSS =", rss_estimates[[model_name]], "\n")
 }
@@ -502,7 +500,7 @@ for (model_name in names(rss_estimates)) {
   }
 }
 
-cat("\n--- Task 2.3: Log-Likelihood and Variance Estimates ---\n")
+cat("\n Log-Likelihood and Variance: \n")
 for (model_name in names(log_likelihood_values)) {
   cat("\n", model_name, "\n")
   cat("  Variance (σ̂²):", variance_estimates[[model_name]], "\n")
@@ -515,7 +513,7 @@ for (model_name in names(log_likelihood_values)) {
 # Constants for AIC/BIC Calculation 
 n <- nrow(target) # Number of data samples
 
-# Define 'k' (number of estimated parameters) for each model
+# 'k' (number of estimated parameters) for each model
 k_values <- list(
   Model1 = 3, # θ1·x4 + θ2·x3² + θbias
   Model2 = 4, # θ1·x4 + θ2·x3² + θ3·x5 + θbias
@@ -528,7 +526,7 @@ k_values <- list(
 aic_values <- list()
 bic_values <- list()
 
-# Iterate through the log-likelihood values from Task 2.3
+# Iterate through the log-likelihood values
 for (model_name in names(log_likelihood_values)) {
   current_log_likelihood <- log_likelihood_values[[model_name]]
   k_param <- k_values[[model_name]] # Get the 'k' value for the current model
@@ -551,7 +549,7 @@ for (model_name in names(log_likelihood_values)) {
   }
 }
 
-cat("\n--- Task 2.4: Akaike Information Criterion (AIC) & Bayesian Information Criterion (BIC) ---\n")
+cat("\n Akaike Information Criterion (AIC) & Bayesian Information Criterion (BIC): \n")
 for (model_name in names(aic_values)) {
   cat("\n", model_name, "\n")
   cat("  AIC:", aic_values[[model_name]], "\n")
@@ -631,7 +629,7 @@ for (model_name in names(model_x_builders)) {
 }
 ```
 
-
+## Task 2.6: Selection of Best Regression Model
 ```{r}
 
 # Compile all model evaluation metrics into a comprehensive table 
@@ -646,14 +644,13 @@ model_comparison <- data.frame(
 )
 
 # Display the comprehensive table 
-cat("\n--- Comprehensive Comparison of All Models ---\n")
+cat("\n Comprehensive Comparison of All Models \n")
 print(kable(model_comparison,
             caption = "Comprehensive Comparison of All Models",
             digits = c(0, 0, 2, 2, 2, 2, 4)))
-cat("\n") # Add a newline for better separation
+cat("\n")
 
 # Rank models based on different criteria 
-# Lower values are better for RSS, AIC, BIC. Higher values are better for LogLikelihood, so we rank negatively.
 rank_rss <- rank(model_comparison$RSS, na.last = "keep", ties.method = "min")
 rank_aic <- rank(model_comparison$AIC, na.last = "keep", ties.method = "min")
 rank_bic <- rank(model_comparison$BIC, na.last = "keep", ties.method = "min")
@@ -674,10 +671,10 @@ ranking_table$Overall_Rank <- rowSums(ranking_table[, c("RSS_Rank", "AIC_Rank", 
 ranking_table <- ranking_table[order(ranking_table$Overall_Rank),]
 
 # Display the ranking table 
-cat("\n--- Model Ranking Based on Different Criteria (Lower Sum of Ranks is Better) ---\n")
+cat("\n Model Ranking Based on Different Criteria (Lower Sum of Ranks is Better) \n")
 print(kable(ranking_table,
             caption = "Model Ranking Based on Different Criteria (Lower is Better)"))
-cat("\n") # Add a newline for better separation
+cat("\n") 
 
 # Determine the best model based on individual criteria 
 best_model_aic_index <- which.min(model_comparison$AIC)
@@ -700,14 +697,9 @@ cat(paste("Based on RSS, the best model is:", best_model_rss_name, "\n"))
 
 
 
-## Train-Test Split
-
-
+## Task 2.7: Train-Test Split
 ```{r}
-
 set.seed(123) # Set seed for reproducibility of data splitting
-
-cat("\n--- Task 2.7: Training/Testing Split, Prediction, and Confidence Intervals ---\n")
 
 # Split the input (features) and output (target) dataset
 sample_size <- nrow(features)
@@ -718,18 +710,19 @@ test_indices <- setdiff(1:sample_size, train_indices)
 train_features <- features[train_indices, ]
 train_target <- target[train_indices, ]
 test_features <- features[test_indices, ]
-y_test <- target[test_indices, ] 
+y_test <- target[test_indices, ]
 
 cat(paste0("Data split: Training samples = ", nrow(train_features), ", Testing samples = ", nrow(test_features), "\n"))
 
 
-# Use the best model and estimate its parameters using the training dataset 
+# Use the best model and estimate its parameters using the training dataset
 best_model_name <- best_model_aic_name
 
-# Reconstruct the design matrix (X_train) for the best model using training features
+# Reconstruct the design matrix (X_train) for the best model using training featuresn.
 if (!exists("model_x_builders") || is.null(model_x_builders[[best_model_name]])) {
   stop("model_x_builders or the builder for the best model is not available. Please ensure Task 2.5 code is run first.")
 }
+
 X_train_model <- model_x_builders[[best_model_name]](train_features, scale_features_matrix)
 
 # Estimate model parameters use the training dataset
@@ -759,12 +752,11 @@ test_metrics <- data.frame(
   Value = c(test_rss, test_rmse, test_mae, test_r_squared)
 )
 
-cat(paste0("\n--- Model Performance on Test Data (", best_model_name, ") ---\n"))
-print(kable(test_metrics, caption = paste0("Model Performance on Test Data for ", best_model_name)))
+print(kable(test_metrics, caption = paste0("Model Performance on Test Data for ", best_model_name), format = "pipe", digits = 3))
 cat("\n")
 
 
-# Compute 95% (model prediction) confidence intervals 
+# Compute 95% (model prediction) confidence intervals
 n_train <- nrow(X_train_model)
 k_params <- ncol(X_train_model) # Number of estimated parameters including intercept
 
@@ -825,6 +817,17 @@ plot_data <- data.frame(
   UpperCI = upper_ci
 )
 
+# Define how many rows to display 
+num_display_rows <- min(10, nrow(plot_data)) # Display up to 10 rows
+
+# Select the sample rows and display them using kable for nice formatting
+sample_display_df <- plot_data[1:num_display_rows, c("Actual", "Predicted", "LowerCI", "UpperCI")]
+print(kable(sample_display_df,
+            caption = paste0("Sample of ", num_display_rows, " Test Predictions with 95% Confidence Intervals for ", best_model_name),
+            format = "pipe",
+            digits = 3)) # Adjust digits for desired precision
+cat("\n")
+
 # Generate ggplot
 ggplot(plot_data, aes(x = index)) +
   geom_ribbon(aes(ymin = LowerCI, ymax = UpperCI, fill = "95% CI"), alpha = 0.2, na.rm = TRUE) + # Shaded CI
@@ -848,33 +851,52 @@ ggplot(plot_data, aes(x = index)) +
   )
 ```
 
+
 # Task 3: Approximate Bayesian Computation (ABC)
 ##  Posterior Distribution and Parameter Estimation
 ```{r}
-
 # Specify Model 5 as the best model
 best_model_name_abc <- "Model5"
-cat(paste0("Using '", best_model_name_abc, "' as the best model for ABC, as instructed.\n"))
+cat(paste0("Using '", best_model_name_abc, "' as the best model for ABC.\n"))
 
 # Ensure the model_x_builder for Model 5 is available
 if (!exists("model_x_builders") || is.null(model_x_builders[[best_model_name_abc]])) {
   stop("model_x_builders or the builder for Model5 is not available. Please ensure Task 2.5 code is run first.")
 }
 
-# Construct the full design matrix for Model 5 using the entire dataset
-X_model_5_full <- model_x_builders[[best_model_name_abc]](features, scale_features_matrix)
+# Ensures that the ABC is based on a training dataset
+set.seed(123) # for reproducibility of data split
+data_full <- as.data.frame(cbind(features, target))
+data_split <- initial_split(data_full, prop = 0.70) # 70% for training
 
-# Estimate parameters for Model 5 using the full dataset
-theta_estimate_model_5_full <- fit_ls(X_model_5_full, target)
-rownames(theta_estimate_model_5_full) <- colnames(X_model_5_full)
+features_train <- as.matrix(training(data_split)[, colnames(features)])
+target_train <- as.matrix(training(data_split)[, colnames(target)])
 
-cat(paste0("\nLeast squares estimates for ", best_model_name_abc, " (full dataset):\n"))
-print(theta_estimate_model_5_full)
+features_test <- as.matrix(testing(data_split)[, colnames(features)])
+target_test <- as.matrix(testing(data_split)[, colnames(target)])
+
+cat(paste0("\nData split into training (", nrow(features_train), " samples) and testing (", nrow(features_test), " samples).\n"))
+
+
+# Construct the design matrix for Model 5 using the TRAINING dataset
+X_train_full_design_matrix <- model_x_builders[[best_model_name_abc]](features_train, scale_features_matrix)
+
+# Check for valid column names in X_train_full_design_matrix
+if (is.null(colnames(X_train_full_design_matrix)) || any(is.na(colnames(X_train_full_design_matrix))) || any(colnames(X_train_full_design_matrix) == "")) {
+  stop("The design matrix (X_train_full_design_matrix) for Model5 contains invalid column names (NULL, NA, or empty string). Please ensure valid, non-empty column names are generated by model_x_builders.")
+}
+
+# Estimate parameters for Model 5 using the TRAINING dataset
+theta_estimate_model_5_train <- fit_ls(X_train_full_design_matrix, target_train)
+rownames(theta_estimate_model_5_train) <- colnames(X_train_full_design_matrix)
+
+cat(paste0("\nLeast squares estimates for ", best_model_name_abc, " (training dataset):\n"))
+print(theta_estimate_model_5_train)
 
 # Convert to a data frame for easier manipulation and sorting
 theta_df <- data.frame(
-  Parameter = rownames(theta_estimate_model_5_full),
-  Estimate = as.vector(theta_estimate_model_5_full)
+  Parameter = rownames(theta_estimate_model_5_train),
+  Estimate = as.vector(theta_estimate_model_5_train)
 )
 theta_df$AbsEstimate <- abs(theta_df$Estimate)
 theta_df_ordered <- theta_df[order(-theta_df$AbsEstimate), ]
@@ -883,18 +905,38 @@ theta_df_ordered <- theta_df[order(-theta_df$AbsEstimate), ]
 params_to_vary_info <- theta_df_ordered[1:2, ]
 params_to_vary_names <- params_to_vary_info$Parameter
 
-# The remaining parameters are fixed to their estimated values
-fixed_params_info <- theta_df_ordered[3:nrow(theta_df_ordered), ]
-fixed_params_values <- setNames(fixed_params_info$Estimate, fixed_params_info$Parameter)
+# Explicitly filter out any invalid parameter names
+params_to_vary_names <- params_to_vary_names[!is.na(params_to_vary_names) & params_to_vary_names != "" & !is.null(params_to_vary_names)]
 
-cat(paste0("\nParameters to vary in ABC (2 with largest absolute LS estimates):\n"))
+# Re-check the length after filtering to ensure at least 2 valid names remain
+if (length(params_to_vary_names) < 2) {
+  stop("After validation and filtering, fewer than 2 valid parameter names remain for ABC. Please check the model definition and data for issues with parameter names or coefficients.")
+}
+
+# Ensure selected parameter names exist in the theta estimate's row names
+if (!all(params_to_vary_names %in% rownames(theta_estimate_model_5_train))) {
+  stop(paste0("Error: Selected parameters to vary (", paste(params_to_vary_names, collapse = ", "), ") do not exist as row names in the training model's theta estimate. Available names: ", paste(rownames(theta_estimate_model_5_train), collapse = ", "), ". This might indicate an issue with feature matrix column naming or theta estimation."))
+}
+
+
+# The remaining parameters are fixed to their estimated values
+if (nrow(theta_df_ordered) > 2) {
+  fixed_params_info <- theta_df_ordered[3:nrow(theta_df_ordered), ]
+  fixed_params_values <- setNames(fixed_params_info$Estimate, fixed_params_info$Parameter)
+} else {
+  fixed_params_info <- data.frame(Parameter = character(0), Estimate = numeric(0), AbsEstimate = numeric(0))
+  fixed_params_values <- setNames(numeric(0), character(0))
+}
+
+
+cat(paste0("\nParameters to vary in ABC:\n"))
 print(params_to_vary_info)
 cat(paste0("\nFixed parameters (and their estimated values):\n"))
 print(fixed_params_values)
 
 # Retrieve the LS estimates for the two parameters to be varied for prior centering
-prior_mean_param1 <- theta_estimate_model_5_full[params_to_vary_names[1], 1]
-prior_mean_param2 <- theta_estimate_model_5_full[params_to_vary_names[2], 1]
+prior_mean_param1 <- theta_estimate_model_5_train[params_to_vary_names[1], 1]
+prior_mean_param2 <- theta_estimate_model_5_train[params_to_vary_names[2], 1]
 
 # Define uniform prior ranges: centered around LS estimate, with a minimum width
 prior_range_half_param1 <- max(5 * abs(prior_mean_param1), 0.5) # Ensures exploration even if LS estimate is small
@@ -911,8 +953,11 @@ priors_abc <- list(
   param2 = list(name = params_to_vary_names[2], type = "uniform", min = prior_param2_min, max = prior_param2_max)
 )
 
-cat("\nUniform prior distributions defined for the varying parameters:\n")
-print(priors_abc)
+# Display the prior parameter names and their uniform ranges
+cat("\nPrior parameters (Uniform Distribution Ranges):\n")
+cat(paste0("- ", priors_abc$param1$name, ": [", round(priors_abc$param1$min, 4), ", ", round(priors_abc$param1$max, 4), "]\n"))
+cat(paste0("- ", priors_abc$param2$name, ": [", round(priors_abc$param2$min, 4), ", ", round(priors_abc$param2$max, 4), "]\n"))
+
 
 # Function to sample a single set of parameters from the defined priors
 sample_from_priors <- function() {
@@ -922,14 +967,15 @@ sample_from_priors <- function() {
   return(param_samples)
 }
 
-# Calculate the observed summary statistic (RSS) for the full model on the full data,
-y_pred_obs_full_model <- X_model_5_full %*% theta_estimate_model_5_full
-residuals_obs_full_model <- target - y_pred_obs_full_model
-observed_rss_full_model <- sum(residuals_obs_full_model^2)
-cat(paste0("\nObserved RSS (S_obs) of ", best_model_name_abc, " on full dataset: ", observed_rss_full_model, "\n"))
+# Calculate the observed summary statistic (RSS) for the OLS model on the TRAINING data.
+y_pred_obs_train_model <- X_train_full_design_matrix %*% theta_estimate_model_5_train
+residuals_obs_train_model <- target_train - y_pred_obs_train_model
+observed_rss_train_model <- sum(residuals_obs_train_model^2)
+cat(paste0("\nObserved RSS of ", best_model_name_abc, " on training dataset: ", observed_rss_train_model, "\n"))
 ```
 
-## Sample from ABC
+
+## Implement Rejection ABC Algorithm
 ```{r}
 # Function to calculate RSS for a given set of simulated parameters.
 calculate_simulated_rss <- function(simulated_theta_vector, X_matrix, observed_y) {
@@ -945,131 +991,124 @@ calculate_simulated_rss <- function(simulated_theta_vector, X_matrix, observed_y
 }
 
 cat(paste0("Summary statistic chosen: Residual Sum of Squares (RSS).\n"))
-cat(paste0("The observed RSS (S_obs) calculated in the previous block is: ", observed_rss_full_model, "\n"))
-```
-
-## Implement Rejection ABC Algorithm
-```{r}
+cat(paste0("The observed RSS calculated on training data is: ", observed_rss_train_model, "\n"))
 
 # Define ABC parameters
-num_simulations <- 1000 # Total number of parameter sets to propose and simulate
-num_accepted_samples <- 1000  # Desired number of samples for the posterior distribution
+n_abc_simulations <- 5000000 # Number of simulations to run for ABC
+epsilon <- 1.5 * observed_rss_train_model
+cat(paste0("Epsilon (tolerance for acceptance): ", epsilon, "\n"))
 
-# Setup parallel processing to speed up simulations
-num_cores <- detectCores() - 1 # Use all but one core to leave one for system/other tasks
-if (num_cores < 1) num_cores <- 1 # Ensure at least one core is used
-cl <- makeCluster(num_cores)
-registerDoParallel(cl)
-cat(paste0("Registered ", num_cores, " cores for parallel processing of ABC simulations.\n"))
-
-# Get the full design matrix for the selected model (Model 5) and the observed target
-X_current_model_full <- model_x_builders[[best_model_name_abc]](features, scale_features_matrix)
-y_observed_full <- target
+# Initialize list to collect accepted samples
+accepted_samples_list <- list()
 
 set.seed(42) # Set seed for reproducibility of random sampling within ABC
 
-# Run the ABC simulations in parallel
-results <- foreach(
-  k = 1:num_simulations,
-  .combine = 'rbind', # Combine results row-wise into a data frame
-  .packages = c('matrixStats') 
-) %dopar% {
+# Using a for loop with explicit acceptance based on epsilon
+cat(paste0("\nStarting ABC simulations (", n_abc_simulations, " iterations).\n"))
+pb <- txtProgressBar(min = 0, max = n_abc_simulations, style = 3) # Progress bar
+
+# Define all parameter names, including fixed ones, for constructing current_theta_abc
+all_param_names <- rownames(theta_estimate_model_5_train)
+
+for (i in 1:n_abc_simulations) {
   # Sample parameters from the prior distribution
   proposed_theta_varying <- sample_from_priors()
 
-  # Construct the full proposed theta vector
-  # Start with the original LS estimates (which include fixed parameters)
-  # Then overwrite the varying parameters with the newly sampled ones
-  proposed_theta_full_sim <- theta_estimate_model_5_full
-  proposed_theta_full_sim[params_to_vary_names[1], 1] <- proposed_theta_varying[params_to_vary_names[1]]
-  proposed_theta_full_sim[params_to_vary_names[2], 1] <- proposed_theta_varying[params_to_vary_names[2]]
+  # Create a full parameter vector for the current simulation
+  current_theta_abc <- theta_estimate_model_5_train # Start with training LS estimates
+  current_theta_abc[params_to_vary_names[1], 1] <- proposed_theta_varying[params_to_vary_names[1]]
+  current_theta_abc[params_to_vary_names[2], 1] <- proposed_theta_varying[params_to_vary_names[2]]
 
-  # Calculate the summary statistic for the simul  ated data
+  # Calculate the summary statistic for the simulated data using TRAINING data
   simulated_rss <- calculate_simulated_rss(
-    simulated_theta_vector = proposed_theta_full_sim,
-    X_matrix = X_current_model_full,
-    observed_y = y_observed_full
+    simulated_theta_vector = current_theta_abc,
+    X_matrix = X_train_full_design_matrix, # Use training design matrix
+    observed_y = target_train              # Use training target
   )
 
-  # Calculate the distance between the observed and simulated summary statistics
-  distance <- abs(observed_rss_full_model - simulated_rss)
+  # Rejection step: accept if simulated RSS is less than epsilon
+  if (simulated_rss < epsilon) {
+    # Store the accepted sample (the two varying parameters and their RSS)
+    temp_data_list <- list()
+    temp_data_list[[params_to_vary_names[1]]] <- proposed_theta_varying[params_to_vary_names[1]]
+    temp_data_list[[params_to_vary_names[2]]] <- proposed_theta_varying[params_to_vary_names[2]]
+    temp_data_list[["rss"]] <- simulated_rss
+    accepted_samples_list[[length(accepted_samples_list) + 1]] <- as.data.frame(temp_data_list)
+  }
+  setTxtProgressBar(pb, i) # Update progress bar
+}
+close(pb) # Close progress bar
 
-  # Return the proposed parameters and their distance
-  data.frame(
-    param1_val = proposed_theta_varying[params_to_vary_names[1]],
-    param2_val = proposed_theta_varying[params_to_vary_names[2]],
-    distance = distance
-  )
+# Combine all accepted samples from the list into a single data frame
+accepted_samples_df <- do.call(rbind, accepted_samples_list)
+
+# Check if any samples were accepted
+if (is.null(accepted_samples_df) || nrow(accepted_samples_df) == 0) {
+  cat("\nNo samples were accepted. Try increasing n_abc_simulations, widening priors, or increasing epsilon.\n")
+  # Create an empty data frame with correct column names if no samples accepted
+  posterior_samples <- data.frame(matrix(ncol = 2, nrow = 0))
+  colnames(posterior_samples) <- params_to_vary_names
+} else {
+  cat(paste("\nNumber of accepted samples:", nrow(accepted_samples_df), "out of", n_abc_simulations, "\n"))
+  cat(paste("Acceptance rate:", round(nrow(accepted_samples_df) / n_abc_simulations * 100, 2), "%\n"))
+  # Store the accepted parameter samples for subsequent plotting
+  posterior_samples <- accepted_samples_df[, 1:2]
+  colnames(posterior_samples) <- params_to_vary_names
 }
 
-# Stop the parallel cluster after simulations are complete
-stopCluster(cl)
-cat("\nParallel processing stopped.\n")
-
-# Sort the results by distance and select the 'num_accepted_samples' with the smallest distances
-results_sorted <- results[order(results$distance), ]
-accepted_samples_df <- results_sorted[1:num_accepted_samples, ]
-
-# The final epsilon is determined by the largest distance among the accepted samples
-final_epsilon <- max(accepted_samples_df$distance)
-
-cat(paste0("\nABC Algorithm finished.\n"))
-cat(paste0("Total simulations performed: ", num_simulations, "\n"))
-cat(paste0("Number of accepted posterior samples: ", nrow(accepted_samples_df), "\n"))
-cat(paste0("Final effective epsilon (tolerance for accepted samples): ", final_epsilon, "\n"))
-
-# Store the accepted parameter samples for subsequent plotting
-posterior_samples <- accepted_samples_df[, 1:2]
-colnames(posterior_samples) <- params_to_vary_names
 ```
 
+
+## Joint and Marginal Posterior Distribution
 ```{r}
-cat("\n--- Task 3 - Sub-question 4 (Continued): Plot Marginal and Joint Posterior Distributions ---\n")
+# Check if posterior_samples is empty before plotting
+if (is.null(posterior_samples) || nrow(posterior_samples) == 0) {
+  cat("\nCannot plot posterior distributions: No samples were accepted in ABC.\n")
+} else {
+  # Convert the collected posterior samples into a data frame suitable for ggplot
+  posterior_df <- as.data.frame(posterior_samples)
 
-# Convert the collected posterior samples into a data frame suitable for ggplot
-posterior_df <- as.data.frame(posterior_samples)
+  # Plot Marginal Posterior Distribution for the First Varying Parameter
+  p_marginal1 <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[1]]])) +
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightblue", color = "black") +
+    geom_density(color = "darkblue", linewidth = 1) +
+    labs(
+      title = paste("Marginal Posterior for Parameter:", params_to_vary_names[1]),
+      x = paste("Value of", params_to_vary_names[1]),
+      y = "Density"
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Plot Marginal Posterior Distribution for the First Varying Parameter 
-p_marginal1 <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[1]]])) +
-  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightblue", color = "black") + 
-  geom_density(color = "darkblue", linewidth = 1) +
-  labs(
-    title = paste("Marginal Posterior for Parameter:", params_to_vary_names[1]), 
-    x = paste("Value of", params_to_vary_names[1]), 
-    y = "Density"
-  ) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold")) 
+  print(p_marginal1)
 
-print(p_marginal1)
+  # Plot Marginal Posterior Distribution for the Second Varying Parameter
+  p_marginal2 <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[2]]])) +
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightgreen", color = "black") +
+    geom_density(color = "darkgreen", linewidth = 1) +
+    labs(
+      title = paste("Marginal Posterior for Parameter:", params_to_vary_names[2]),
+      x = paste("Value of", params_to_vary_names[2]),
+      y = "Density"
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Plot Marginal Posterior Distribution for the Second Varying Parameter 
-p_marginal2 <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[2]]])) +
-  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "lightgreen", color = "black") +
-  geom_density(color = "darkgreen", linewidth = 1) +
-  labs(
-    title = paste("Marginal Posterior for Parameter:", params_to_vary_names[2]), 
-    x = paste("Value of", params_to_vary_names[2]),
-    y = "Density"
-  ) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  print(p_marginal2)
 
-print(p_marginal2)
+  # Plot the Joint Posterior Distribution of the Two Varying Parameters
+  p_joint <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[1]]], y = .data[[params_to_vary_names[2]]])) +
+    geom_point(alpha = 0.2, color = "purple") +
+    geom_density_2d(color = "darkblue", linewidth = 0.8) +
+    labs(
+      title = paste("Joint Posterior Distribution of", params_to_vary_names[1], "and", params_to_vary_names[2]),
+      x = paste("Value of", params_to_vary_names[1]),
+      y = paste("Value of", params_to_vary_names[2])
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Plot the Joint Posterior Distribution of the Two Varying Parameters 
-p_joint <- ggplot(posterior_df, aes(x = .data[[params_to_vary_names[1]]], y = .data[[params_to_vary_names[2]]])) +
-  geom_point(alpha = 0.2, color = "purple") + 
-  geom_density_2d(color = "darkblue", linewidth = 0.8) + 
-  labs(
-    title = paste("Joint Posterior Distribution of", params_to_vary_names[1], "and", params_to_vary_names[2]),
-    x = paste("Value of", params_to_vary_names[1]), 
-    y = paste("Value of", params_to_vary_names[2]) 
-  ) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-
-print(p_joint)
-
+  print(p_joint)
+}
 ```
 
