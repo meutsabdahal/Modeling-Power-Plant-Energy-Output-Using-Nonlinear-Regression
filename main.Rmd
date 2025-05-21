@@ -1059,7 +1059,7 @@ if (is.null(accepted_samples_df) || nrow(accepted_samples_df) == 0) {
 ```
 
 
-## Joint and Marginal Posterior Distribution
+## Marginal and Joint Posterior Distribution
 ```{r}
 # Check if posterior_samples is empty before plotting
 if (is.null(posterior_samples) || nrow(posterior_samples) == 0) {
